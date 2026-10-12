@@ -35,6 +35,8 @@ import [
     "lib/text/string_utils" as string_utils,
     "lib/network/net_utils" as net_utils,
     "lib/collections/array_utils" as array_utils,
+    "lib/ruls/cdn" as cdn,
+    "lib/ruls/waf" as waf,
     "lib/network/http_utils" as http_utils,
 ]
 
@@ -45,16 +47,21 @@ func main() {
         [1, 2, 3],
         func(value) { return value * 2 },
     )
-    let response = http_utils.http_utils_request({
-        "url": "https://example.com/api",
-        "method": "GET",
+    let cdn_matches = cdn.cdn_match("cname", "static.example.cdn.cloudflare.net")
+    let waf_matches = waf.waf_match({
+        "response_headers": {"Server": "cloudflare"},
+    })
+    let response = http_utils.get("https://example.com/api", {
         "headers": {"Accept": "application/json"},
+        "params": {"page": 1},
         "timeout": 5,
     })
 
     println(reversed)
     println(open_ports)
     println(doubled)
+    println(cdn_matches)
+    println(waf_matches)
     println(response)
 }
 ```
@@ -69,6 +76,8 @@ func main() {
 | 文本 | `string` | `text/string_utils.ys` |
 | 文本 | `regex` | `text/regex_utils.ys` |
 | 文本 | `encoding` | `text/encoding_utils.ys` |
+| 规则 | 纯 YScript | `ruls/cdn.ys` |
+| 规则 | 纯 YScript | `ruls/waf.ys` |
 | 二进制 | `binary` | `binary/binary_utils.ys` |
 | 二进制 | `compress` | `binary/compress_utils.ys` |
 | 数据格式 | `csv` | `data/csv_utils.ys` |
@@ -113,6 +122,8 @@ func main() {
 
 这些扩展模块是便利/组合层，不替代内置 API。CUDA、raw 抓包、FFI、OCR 等平台相关或需要权限的功能，仍受运行时可用性与权限策略约束。
 
+`ruls/waf.ys` 的 `waf_fingerprints()` 返回内置 WAF 规则；`waf_match(observation)` 接受可选的 `response_headers`、`response_content` 和 `ssl_certificate` 字段，并返回达到规则置信阈值的被动匹配及分数。`active_detect` 规则仅作为数据保留，不会由匹配函数发起请求或执行探测。
+
 纯 YScript 模块 `math/math_utils.ys` 提供区间、取整、实数幂与根、数论、统计、三角与双曲函数、对数、溢出检查整数运算和浮点辅助功能；它不依赖运行时 `math` 命名空间。接口、语义及限制见[数学库文档](../../doc/YScript.wiki/64_math数学库.md)。
 
 ## 实验性模块
@@ -134,6 +145,8 @@ func main() {
 
 ```sh
 ysc ysc-model/test/lib_utils_smoke.ys
+ysc ysc-model/test/ruls_cdn_smoke.ys
+ysc ysc-model/test/ruls_waf_smoke.ys
 ysc ysc-model/test/math_utils_smoke.ys
 ysc ysc-model/test/ystui_smoke.ys
 ysc ysc-model/test/ystui_components_smoke.ys

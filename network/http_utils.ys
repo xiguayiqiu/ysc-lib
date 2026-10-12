@@ -1,6 +1,225 @@
 package http_utils
 import ["http", "json"]
 
+@http_utils_normalize_options HEAD
+# 将常用 Requests/Niquests 选项名映射为内置 http 配置，并采用安全的 TLS 与网络错误默认值。
+@http_utils_normalize_options END
+func http_utils_normalize_options(options = nil, defaults = true) {
+    let normalized = {}
+    if defaults {
+        normalized.set("insecure", false)
+        normalized.set("raise", true)
+    }
+    if options != nil {
+        for key, value in options {
+            if key == "params" {
+                normalized.set("query", value)
+            } else if key == "data" {
+                normalized.set("body", value)
+            } else if key == "verify" {
+                assert(value == true or value == false, "verify must be a boolean")
+                normalized.set("insecure", not value)
+            } else if key == "allow_redirects" {
+                assert(
+                    value == true or value == false,
+                    "allow_redirects must be a boolean",
+                )
+                if value {
+                    normalized.set("redirects", 10)
+                } else {
+                    normalized.set("redirects", 0)
+                }
+            } else {
+                normalized.set(key, value)
+            }
+        }
+    }
+    return normalized
+}
+
+@http_utils_request_with_options HEAD
+# 通过 http.Request 的配置字典发起请求；所有动词封装共用此路径。
+@http_utils_request_with_options END
+func http_utils_request_with_options(method, url, options) {
+    let request_options = http_utils_normalize_options(options)
+    request_options.set("method", string(method))
+    request_options.set("url", string(url))
+    return http.Request(request_options)
+}
+
+@http_utils_session_body_options HEAD
+# 分离会话动词的请求体和选项字典，避免把 body 当成请求头配置。
+@http_utils_session_body_options END
+func http_utils_session_body_options(options, body) {
+    let normalized = http_utils_normalize_options(options, false)
+    let resolved_body = body
+    let option_body = normalized.get("body", nil)
+    if resolved_body == nil and option_body != nil {
+        resolved_body = option_body
+    }
+    normalized.delete("body")
+    return {
+        "body": resolved_body,
+        "options": normalized,
+    }
+}
+
+@get HEAD
+# 发起 GET 请求；支持 params、headers、cookies、auth、timeout、retries、verify 等 options。
+@get END
+func get(url, options = nil) {
+    return http_utils_request_with_options("GET", url, options)
+}
+
+@head HEAD
+# 发起 HEAD 请求；options 为可选请求配置字典。
+@head END
+func head(url, options = nil) {
+    return http_utils_request_with_options("HEAD", url, options)
+}
+
+@post HEAD
+# 发起 POST 请求；body 为可选请求体，options 支持 data、json、form 等常见键。
+@post END
+func post(url, body = nil, options = nil) {
+    let request_options = http_utils_normalize_options(options)
+    if body != nil {
+        request_options.set("body", body)
+    }
+    return http_utils_request_with_options("POST", url, request_options)
+}
+
+@put HEAD
+# 发起 PUT 请求；body 为可选请求体，options 为可选请求配置字典。
+@put END
+func put(url, body = nil, options = nil) {
+    let request_options = http_utils_normalize_options(options)
+    if body != nil {
+        request_options.set("body", body)
+    }
+    return http_utils_request_with_options("PUT", url, request_options)
+}
+
+@patch HEAD
+# 发起 PATCH 请求；body 为可选请求体，options 为可选请求配置字典。
+@patch END
+func patch(url, body = nil, options = nil) {
+    let request_options = http_utils_normalize_options(options)
+    if body != nil {
+        request_options.set("body", body)
+    }
+    return http_utils_request_with_options("PATCH", url, request_options)
+}
+
+@delete HEAD
+# 发起 DELETE 请求；options 为可选请求配置字典。
+@delete END
+func delete(url, options = nil) {
+    return http_utils_request_with_options("DELETE", url, options)
+}
+
+@options HEAD
+# 发起 OPTIONS 请求；options 为可选请求配置字典。
+@options END
+func options(url, request_options = nil) {
+    return http_utils_request_with_options("OPTIONS", url, request_options)
+}
+
+@session HEAD
+# 创建 HTTP 会话，支持 base_url、默认 headers/cookies、timeout、proxy、auth、retries。
+# 包装内置 http.Session 并映射请求选项；TLS 默认启用证书校验，传 verify:false 可关闭。
+@session END
+func session(options = nil) {
+    let native = http.Session(http_utils_normalize_options(options))
+    let client = {}
+    for key, value in native {
+        client.set(key, value)
+    }
+    client.set("get", func(url, request_options = nil) {
+        return native.get(url, http_utils_normalize_options(request_options, false))
+    })
+    client.set("head", func(url, request_options = nil) {
+        return native.head(url, http_utils_normalize_options(request_options, false))
+    })
+    client.set("delete", func(url, request_options = nil) {
+        return native.delete(url, http_utils_normalize_options(request_options, false))
+    })
+    client.set("options", func(url, request_options = nil) {
+        return native.options(url, http_utils_normalize_options(request_options, false))
+    })
+    client.set("post", func(url, body = nil, request_options = nil) {
+        let prepared = http_utils_session_body_options(request_options, body)
+        return native.post(
+            url,
+            prepared.body,
+            prepared.options,
+        )
+    })
+    client.set("put", func(url, body = nil, request_options = nil) {
+        let prepared = http_utils_session_body_options(request_options, body)
+        return native.put(
+            url,
+            prepared.body,
+            prepared.options,
+        )
+    })
+    client.set("patch", func(url, body = nil, request_options = nil) {
+        let prepared = http_utils_session_body_options(request_options, body)
+        return native.patch(
+            url,
+            prepared.body,
+            prepared.options,
+        )
+    })
+    client.set("request", func(method, url, request_options = nil) {
+        let normalized = http_utils_normalize_options(request_options, false)
+        normalized.set("method", string(method))
+        normalized.set("url", string(url))
+        return native.request(normalized)
+    })
+    client.set("do", func(method, url, body = nil, request_options = nil) {
+        let prepared = http_utils_session_body_options(request_options, body)
+        return native.do(
+            method,
+            url,
+            prepared.body,
+            prepared.options,
+        )
+    })
+    return client
+}
+
+@Session HEAD
+# Niquests 风格大小写别名，等价于 session(options)。
+@Session END
+func Session(options = nil) {
+    return session(options)
+}
+
+@response_json HEAD
+# 解析响应 body 为 JSON；响应为 nil 时返回 nil，解析错误向上传播。
+@response_json END
+func response_json(response) {
+    if response == nil {
+        return nil
+    }
+    return http.Json(response)
+}
+
+@raise_for_status HEAD
+# 对 4xx/5xx HTTP 响应明确报错并返回原响应；2xx/3xx 响应原样返回。
+# nil 响应会报错，因为没有可检查的 HTTP 状态码。
+@raise_for_status END
+func raise_for_status(response) {
+    assert(response != nil, "cannot check status of a nil HTTP response")
+    let status = int(response.status)
+    assert(
+        status < 400,
+        "HTTP " + string(status) + " " + string(response.status_text),
+    )
+    return response
+}
+
 @get_json HEAD
 # get_json(url) 发起 GET 并将响应 body 解析为 JSON。
 # 成功返回 {response: 原始响应字典, data: 解析后的值}；请求无响应时返回 null。
@@ -58,12 +277,14 @@ func header(response, name, fallback) {
 }
 
 @http_utils_request HEAD
-# 使用 http.Request 按 options 字典发起可配置 HTTP 请求并返回原生响应对象。
-# options 至少需要 url；可选 method、body、headers、query、json、form、timeout、
-# retries、cookies、auth 和其他底层支持项；策略或请求错误遵循原生 API。
+# 兼容旧式 http_utils_request(options) 字典调用，并支持
+# http_utils_request(method, url, options?) 形式的通用请求。
 @http_utils_request END
-func http_utils_request(options) {
-    return http.Request(options)
+func http_utils_request(options, url = nil, request_options = nil) {
+    if url == nil {
+        return http.Request(options)
+    }
+    return http_utils_request_with_options(options, url, request_options)
 }
 
 @http_utils_request_json HEAD

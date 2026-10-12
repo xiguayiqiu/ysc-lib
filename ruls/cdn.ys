@@ -1,0 +1,205 @@
+package cdn
+import ["strings"]
+
+@cdn_fingerprints HEAD
+# 返回 CDN 指纹规则列表；每项包含 name、vendor、type 和 patterns。
+# type 为 cname 或 header。每次调用创建新的规则集合，调用方可安全修改返回值。
+@cdn_fingerprints END
+func cdn_fingerprints() {
+    return [
+        cdn_rule(
+            "Cloudflare",
+            "Cloudflare, Inc.",
+            "cname",
+            ["cloudflare", "cf-", ".cdn.cloudflare.net"],
+        ),
+        cdn_rule(
+            "Cloudflare",
+            "Cloudflare, Inc.",
+            "header",
+            ["cf-ray", "cf-cache-status", "server: cloudflare", "x-cdn-provider: cloudflare"],
+        ),
+        cdn_rule(
+            "Akamai",
+            "Akamai Technologies",
+            "cname",
+            ["akamai", "akamaiedge", "edgesuite", "akadns", "akam.net"],
+        ),
+        cdn_rule(
+            "Akamai",
+            "Akamai Technologies",
+            "header",
+            ["x-akamai-transformed", "server: akamaighost", "x-akamai-cache-key"],
+        ),
+        cdn_rule(
+            "Amazon CloudFront",
+            "Amazon Web Services",
+            "cname",
+            ["cloudfront", ".cloudfront.net"],
+        ),
+        cdn_rule(
+            "Amazon CloudFront",
+            "Amazon Web Services",
+            "header",
+            ["x-amz-cf-id", "x-amz-cf-pop", "server: cloudfront"],
+        ),
+        cdn_rule(
+            "Google Cloud CDN",
+            "Google Cloud Platform",
+            "cname",
+            ["googleusercontent.com", "googledomains.com", "gc-cdn", "googlehosted.com"],
+        ),
+        cdn_rule(
+            "Microsoft Azure CDN",
+            "Microsoft Azure",
+            "cname",
+            ["azure", "azureedge.net", "microsoftazurecdn", "azurewebsites.net"],
+        ),
+        cdn_rule("Fastly", "Fastly, Inc.", "cname", ["fastly", "fastlylb", "fastly.net"]),
+        cdn_rule(
+            "Fastly",
+            "Fastly, Inc.",
+            "header",
+            ["x-served-by: fastly", "via: varnish", "x-fastly-request-id"],
+        ),
+        cdn_rule("Bunny.net", "Bunny.net", "cname", ["bunny.net", "b-cdn.net", "bunnycdn"]),
+        cdn_rule(
+            "阿里云CDN",
+            "阿里巴巴",
+            "cname",
+            ["kunlun", "alicdn", "aliyun", ".cdn.aliyuncs.com", ".kunlun", "taobaocdn", "alicdn.com", "aliyuncs"],
+        ),
+        cdn_rule(
+            "阿里云CDN",
+            "阿里巴巴",
+            "header",
+            ["x-cdn-provider: aliyun", "x-ali-cdn-request-id", "server: tengine"],
+        ),
+        cdn_rule(
+            "腾讯云CDN",
+            "腾讯云",
+            "cname",
+            ["tencent", "qcloud", ".cdn.dnsv1.com", ".tlv1.com", ".tcdn.com", "qpic", "gtimg", "myqcloud"],
+        ),
+        cdn_rule(
+            "腾讯云CDN",
+            "腾讯云",
+            "header",
+            ["x-cdn-provider: qcloud", "x-qcache-request-id"],
+        ),
+        cdn_rule(
+            "百度智能云CDN",
+            "百度云",
+            "cname",
+            ["baidu", "bdydns", ".bsgslb.com", ".baidu.com", "bdstatic", "shifen", "baiduyun"],
+        ),
+        cdn_rule("百度智能云CDN", "百度云", "header", ["x-cdn-provider: baidu", "server: bfe"]),
+        cdn_rule(
+            "华为云CDN",
+            "华为云",
+            "cname",
+            ["huawei", "hwcdn", ".myhuaweicloud.com", ".huaweicloud.com", "huaweicloud"],
+        ),
+        cdn_rule("又拍云", "又拍云", "cname", ["upyun", "upaiyun", ".upaiyun.com", "upyun.com"]),
+        cdn_rule("七牛云", "七牛云", "cname", ["qiniu", "qbox.me", ".qiniudn.com", "qiniu.com"]),
+        cdn_rule(
+            "网宿科技CDN",
+            "网宿科技",
+            "cname",
+            ["wangsu", "wsweb", ".lxdns.com", ".wswebcdn.com", "wsglb", "wscdn"],
+        ),
+        cdn_rule(
+            "蓝汛ChinaCache",
+            "蓝汛通信",
+            "cname",
+            ["chinacache", "lxdns", ".chinacache.com", "chinacache"],
+        ),
+        cdn_rule("灵境云EdgeCDN", "灵境云", "cname", ["edgecdn", "lingjing"]),
+        cdn_rule(
+            "火山引擎CDN",
+            "字节跳动",
+            "cname",
+            ["volcengine", "bytecdn", ".bytecdn.com", "douyinpic", "pstatp", "bytedns", "toutiao"],
+        ),
+        cdn_rule(
+            "美团云CDN",
+            "美团",
+            "cname",
+            ["meituan", "meituancdn", ".meituan.com", "meituan", "meituan.net"],
+        ),
+        cdn_rule("京东云CDN", "京东云", "cname", ["jdcloud", "jcloud", ".jdcloud.com", "jd", "jd.com"]),
+        cdn_rule("StackPath", "StackPath", "cname", ["stackpath", "highwinds"]),
+        cdn_rule("Sucuri", "Sucuri", "cname", ["sucuri", "sucuri.net"]),
+        cdn_rule("Incapsula", "Imperva", "cname", ["incapsula", "imperva"]),
+        cdn_rule("Limelight", "Limelight Networks", "cname", ["llnwd", "limelight"]),
+        cdn_rule("EdgeCast", "EdgeCast (Verizon)", "cname", ["edgecast", "verizondigitalmedia"]),
+        cdn_rule(
+            "自建CDN",
+            "自建CDN",
+            "cname",
+            [
+                "cdn", "cdn.", ".cdn", "ws.", "gslb", "glb", "slb", "waf", "shield",
+                "edge", "cache", "static", "img", "pic", "image", "video", "media",
+                "download", "file",
+            ],
+        ),
+        cdn_rule("HTTP缓存服务", "CDN特征", "header", ["x-cache", "x-cache-hits", "x-cache-lookup"]),
+        cdn_rule("反向代理服务", "CDN特征", "header", ["via", "x-via"]),
+        cdn_rule(
+            "Nginx/OpenResty",
+            "CDN特征",
+            "header",
+            [
+                "server: nginx", "server: openresty", "server: tengine",
+                "x-accel-buffering", "x-accel-limit-rate", "x-accel-redirect",
+            ],
+        ),
+        cdn_rule("Squid/Varnish", "CDN特征", "header", ["server: squid", "server: varnish"]),
+    ]
+}
+
+@cdn_rule HEAD
+# 构造一条 CDN 指纹规则记录，字段为 name、vendor、type 和 patterns。
+# fingerprint_type 通常为 cname 或 header；该构造函数不校验类型或匹配模式。
+@cdn_rule END
+func cdn_rule(name, vendor, fingerprint_type, patterns) {
+    return {
+        "name": name,
+        "vendor": vendor,
+        "type": fingerprint_type,
+        "patterns": patterns,
+    }
+}
+
+@cdn_match HEAD
+# 按 cname 或 header 类型在 observed 文本中查找指纹，返回所有命中的规则。
+# 比较不区分大小写并使用子串匹配；每项结果保留规则字段，并附带首个命中的 matched_pattern。
+# fingerprint_type 仅支持 cname 和 header；未知类型明确报错。
+@cdn_match END
+func cdn_match(fingerprint_type, observed) {
+    let kind = strings.ToLower(string(fingerprint_type))
+    assert(kind == "cname" or kind == "header", "fingerprint_type must be cname or header")
+
+    let text = strings.ToLower(string(observed))
+    let found_rules = []
+    for fingerprint in cdn_fingerprints() {
+        if fingerprint.type == kind {
+            let matched_pattern = nil
+            for pattern in fingerprint.patterns {
+                if matched_pattern == nil and strings.Contains(text, pattern) {
+                    matched_pattern = pattern
+                }
+            }
+            if matched_pattern != nil {
+                found_rules.append({
+                    "name": fingerprint.name,
+                    "vendor": fingerprint.vendor,
+                    "type": fingerprint.type,
+                    "patterns": fingerprint.patterns,
+                    "matched_pattern": matched_pattern,
+                })
+            }
+        }
+    }
+    return found_rules
+}
