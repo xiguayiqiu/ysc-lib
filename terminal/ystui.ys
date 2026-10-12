@@ -1,0 +1,2559 @@
+package ystui
+# [实验性功能] 此包的公开 API、控件行为及终端绘制结果可能变更。
+import ["term", "stdio", "string", "strings", "io", "sys", "path", "encoding"]
+
+func _ystui_widget(kind, label, value) {
+    return {
+    "kind": kind,
+    "label": string(label),
+    "value": value,
+    "id": -1,
+    "parent": -1,
+    "children": [],
+    "x": 0,
+    "y": 0,
+    "width": 0,
+    "height": 0,
+    "hidden": false,
+    "scroll": 0,
+    "cursor": 0,
+    "grow": 1,
+    "bordered": false,
+    "disabled": false,
+    }
+}
+
+func _ystui_min(left, right) {
+    if left < right {
+        return left
+    }
+    return right
+}
+
+func _ystui_max(left, right) {
+    if left > right {
+        return left
+    }
+    return right
+}
+
+@create HEAD
+# create(title, width, height, options?) 创建 TUI 状态；尺寸至少为 12x7。
+# options 可设置 theme、mouse、footer。创建本身不访问终端，适合测试和自定义循环。
+@create END
+func create(title, width, height, options = nil) {
+    assert(width >= 12 and height >= 7, "ystui dimensions must be at least 12x7")
+    assert(options == nil or type(options) == "dict", "ystui options must be a dictionary")
+    let theme = {
+    "accent": [100, 180, 255],
+    "text": [225, 230, 238],
+    "muted": [135, 145, 160],
+    "success": [110, 210, 145],
+    "warning": [245, 190, 90],
+    "error": [245, 115, 115],
+    "surface": [45, 52, 64],
+    }
+    let mouse = true
+    let footer = "Tab/↑↓ focus  Enter select  Ctrl-C quit"
+    if options != nil {
+        if options.theme != nil {
+            for key in options.theme.keys() {
+                theme.set(key, options.theme[key])
+            }
+        }
+        if options.mouse != nil {
+            mouse = options.mouse
+        }
+        if options.footer != nil {
+            footer = string(options.footer)
+        }
+    }
+    let root = _ystui_widget("container", title, "")
+    root.__ystui_root = true
+    root.layout = "column"
+    root.x = 1
+    root.y = 3
+    root.width = width - 2
+    root.height = height - 5
+    return {
+    "title": string(title),
+    "width": width,
+    "height": height,
+    "root": root,
+    "widgets": [],
+    "focus": -1,
+    "running": true,
+    "last_action": "",
+    "frame": 0,
+    "modal": nil,
+    "toast": "",
+    "toast_level": "info",
+    "theme": theme,
+    "mouse": mouse,
+    "footer": footer,
+    "previous": nil,
+    "drag_widget": -1,
+    "drag_moved": false,
+    "pending_click": -1,
+    "resize_suspended": false,
+    }
+}
+
+func _ystui_input(kind, label, initial, placeholder, max_length) {
+    let widget = _ystui_widget(kind, label, string(initial))
+    widget.placeholder = string(placeholder)
+    widget.max_length = max_length
+    widget.cursor = len(strings.ToRunes(widget.value))
+    return widget
+}
+
+@text HEAD
+# text(content) 创建只读文本行；label(content) 是同义构造器。
+@text END
+func text(content) {
+    return _ystui_widget("text", content, "")
+}
+
+func label(content) {
+    return text(content) 
+}
+
+@paragraph HEAD
+# paragraph(content) 创建自动换行的说明文本控件。
+@paragraph END
+func paragraph(content) {
+    return _ystui_widget("paragraph", content, "")
+}
+
+@code_block HEAD
+# code_block(content) 以等宽风格显示代码/日志片段；内容按可用宽度裁剪。
+@code_block END
+func code_block(content) {
+    return _ystui_widget("code_block", content, "")
+}
+
+@markdown HEAD
+# markdown(content) 提供轻量文本呈现；保留段落和行结构，不解析 HTML 或完整 Markdown 语法。
+@markdown END
+func markdown(content) {
+    return _ystui_widget("markdown", content, "")
+}
+
+@button HEAD
+# button(label) 创建按钮；激活后记录其 label 并结束 run()，用 activated() 查询。
+@button END
+func button(label) {
+    return _ystui_widget("button", label, "")
+}
+
+@input HEAD
+# input(label, initial?, placeholder?) 创建可编辑单行文本框。
+@input END
+func input(label, initial = "", placeholder = "") {
+    return _ystui_input("input", label, initial, placeholder, 1024)
+}
+
+@text_area HEAD
+# text_area(label, initial?, placeholder?) 创建支持换行的多行编辑器。
+@text_area END
+func text_area(label, initial = "", placeholder = "") {
+    return _ystui_input("text_area", label, initial, placeholder, 16384)
+}
+
+@password_field HEAD
+# password_field(label, initial?) 创建掩码输入框；明文仍可由 value() 读取。
+@password_field END
+func password_field(label, initial = "") {
+    return _ystui_input("password", label, initial, "", 1024)
+}
+
+@search_box HEAD
+# search_box(label, initial?) 创建输入框；Enter 将其内容作为最近操作返回。
+@search_box END
+func search_box(label, initial = "") {
+    return _ystui_input("search", label, initial, "Search...", 1024)
+}
+
+@command_input HEAD
+# command_input(label, initial?) 创建命令输入框；Enter 将内容作为最近操作返回。
+@command_input END
+func command_input(label, initial = "") {
+    return _ystui_input("command", label, initial, "Command...", 4096)
+}
+
+@checkbox HEAD
+# checkbox(label, checked?) 创建复选框。
+@checkbox END
+func checkbox(label, checked = false) {
+    assert(type(checked) == "bool", "ystui checkbox state must be boolean")
+    return _ystui_widget("checkbox", label, checked)
+}
+
+@select HEAD
+# select(label, options, selected?) 创建单选列表，索引从 0 开始。
+@select END
+func select(label, options, selected = 0) {
+    assert(len(options) > 0 and selected >= 0 and selected < len(options), "ystui select requires options and a valid selected index")
+    let widget = _ystui_widget("select", label, selected)
+    widget.options = options
+    return widget
+}
+
+func combo_box(label, options, selected = 0) {
+    let widget = select(label, options, selected)
+    widget.kind = "combo_box"
+    return widget
+}
+
+func pick_list(label, options, selected = 0) {
+    let widget = select(label, options, selected)
+    widget.kind = "pick_list"
+    return widget
+}
+
+func radio_group(label, options, selected = 0) {
+    let widget = select(label, options, selected)
+    widget.kind = "radio_group"
+    return widget
+}
+
+func _ystui_contains(items, needle) {
+    for item in items {
+        if item == needle {
+            return true
+        }
+    }
+    return false
+}
+
+func multi_select(label, options, selected = nil) {
+    assert(len(options) > 0, "ystui multi_select requires at least one option")
+    let chosen = selected
+    if chosen == nil {
+        chosen = []
+    }
+    for index in chosen {
+        assert(index >= 0 and index < len(options), "ystui multi_select index is out of range")
+    }
+    let widget = _ystui_widget("multi_select", label, chosen)
+    widget.options = options
+    widget.selected = 0
+    return widget
+}
+
+func checkbox_group(label, options, selected = nil) {
+    let widget = multi_select(label, options, selected)
+    widget.kind = "checkbox_group"
+    return widget
+}
+
+func _ystui_list(kind, label, items, selected) {
+    assert(selected >= 0 and (selected < len(items) or (len(items) == 0 and selected == 0)), "ystui list selection is out of range")
+    let widget = _ystui_widget(kind, label, selected)
+    widget.items = items
+    widget.scroll = selected
+    return widget
+}
+
+@list_view HEAD
+# list_view(label, items, selected?) 创建可滚动列表；方向键移动选中行。
+@list_view END
+func list_view(label, items, selected = 0) {
+    return _ystui_list("list", label, items, selected)
+}
+
+func virtual_list(label, items, selected = 0) {
+    return _ystui_list("virtual_list", label, items, selected)
+}
+
+func file_list(label, items, selected = 0) {
+    return _ystui_list("file_list", label, items, selected)
+}
+
+func log_list(label, items = nil) {
+    let entries = items
+    if entries == nil {
+        entries = []
+    }
+    let widget = _ystui_widget("log_list", label, _ystui_max(0, len(entries) - 1))
+    widget.items = entries
+    widget.selected = _ystui_max(0, len(entries) - 1)
+    widget.max_items = 1000
+    return widget
+}
+
+@log_push HEAD
+# log_push(widget, message) 向 log_list 追加一行并限制保留量为 max_items。
+@log_push END
+func log_push(widget, message) {
+    assert(widget.kind == "log_list", "ystui.log_push requires a log_list")
+    widget.items.append(string(message))
+    while len(widget.items) > widget.max_items {
+        widget.items = widget.items[1:]
+    }
+    widget.selected = _ystui_max(0, len(widget.items) - 1)
+    widget.value = widget.selected
+    widget.scroll = _ystui_max(0, len(widget.items) - 1)
+    return widget
+}
+
+@table HEAD
+# table(headers, rows) 创建表格；列宽依可用宽度均分。
+@table END
+func table(headers, rows) {
+    assert(len(headers) > 0, "ystui table requires at least one header")
+    for row in rows {
+        assert(type(row) == "list", "ystui table rows must be lists")
+        assert(len(row) == len(headers), "ystui table rows must match header count")
+    }
+    let widget = _ystui_widget("table", "", 0)
+    widget.headers = headers
+    widget.rows = rows
+    widget.sort_column = -1
+    return widget
+}
+
+func data_table(headers, rows) {
+    return table(headers, rows) 
+}
+
+func sortable_table(headers, rows) {
+    let widget = table(headers, rows)
+    widget.kind = "sortable_table"
+    return widget
+}
+
+@tree_view HEAD
+# tree_view(label, items, selected?) 创建可导航的层级列表。
+# 项目可以是文本或包含 text、depth、expanded、children 的字典。
+@tree_view END
+func tree_view(label, items, selected = 0) {
+    return _ystui_list("tree", label, items, selected)
+}
+
+func outline(label, items, selected = 0) {
+    let widget = tree_view(label, items, selected)
+    widget.kind = "outline"
+    return widget
+}
+
+func file_system_tree(label, root, selected = 0) {
+    let widget = tree_view(label, [])
+    widget.kind = "filesystem_tree"
+    widget.root_path = path.clean(path.abs(string(root)))
+    widget.items = []
+    widget.paths = []
+    widget.item_is_dir = []
+    widget.expanded = []
+    _ystui_read_tree_directory(widget, widget.root_path, 0)
+    assert(selected >= 0 and (selected < len(widget.items) or (len(widget.items) == 0 and selected == 0)), "ystui filesystem tree selection is out of range")
+    widget.value = selected
+    widget.scroll = selected
+    return widget
+}
+
+func _ystui_read_tree_directory(widget, directory, depth) {
+    let entries = io.read_dir(directory)
+    for entry in entries {
+        let full_path = path.join(directory, entry.name)
+        widget.items.append({
+        "text": entry.name,
+        "depth": depth,
+        "path": full_path,
+        "is_dir": entry.is_dir,
+        })
+        widget.paths.append(full_path)
+        widget.item_is_dir.append(entry.is_dir)
+        widget.expanded.append(false)
+    }
+}
+
+func chart(label, values) {
+    return _ystui_chart("chart", label, values)
+}
+
+func line_chart(label, values) {
+    return _ystui_chart("line_chart", label, values)
+}
+
+func bar_chart(label, values) {
+    return _ystui_chart("bar_chart", label, values)
+}
+
+func _ystui_chart(kind, label, values) {
+    assert(len(values) > 0, "ystui chart requires at least one value")
+    for item in values {
+        assert(type(item) == "int" or type(item) == "float", "ystui chart values must be numeric")
+    }
+    let widget = _ystui_widget(kind, label, values)
+    return widget
+}
+
+func sparkline(label, values) {
+    let widget = _ystui_chart("sparkline", label, values)
+    return widget
+}
+
+func canvas(label, lines) {
+    let widget = _ystui_widget("canvas", label, lines)
+    return widget
+}
+
+func text_editor(label, initial = "") {
+    return _ystui_editor("text_editor", label, initial)
+}
+
+func code_editor(label, initial = "") {
+    return _ystui_editor("code_editor", label, initial)
+}
+
+func _ystui_editor(kind, label, initial) {
+    let widget = _ystui_input(kind, label, initial, "", 65536)
+    widget.scroll_x = 0
+    return widget
+}
+
+func hex_view(label, data) {
+    let bytes = encoding.hex_encode(data)
+    let hex_rows = []
+    let offset = 0
+    while offset < len(bytes) {
+        let stop = _ystui_min(offset + 32, len(bytes))
+        let row_hex = strings.ToUpper(bytes[offset:stop])
+        hex_rows.append(string(int(offset / 2)) + "  " + row_hex)
+        offset = stop
+    }
+    let widget = _ystui_widget("hex_view", label, strings.Join(hex_rows, "\n"))
+    return widget
+}
+
+func viewport(label, content) {
+    let widget = _ystui_widget("viewport", label, content)
+    widget.scroll = 0
+    return widget
+}
+
+func terminal_embed(label, content = "") {
+    return _ystui_stream_widget("terminal_embed", label, content)
+}
+
+func log_viewer(label, content = "") {
+    return _ystui_stream_widget("log_viewer", label, content)
+}
+
+func stream_widget(label, content = "") {
+    return _ystui_stream_widget("stream_widget", label, content)
+}
+
+func _ystui_stream_widget(kind, label, content) {
+    let widget = _ystui_widget(kind, label, content)
+    widget.items = []
+    if string(content) != "" {
+        for line in strings.Split(string(content), "\n") {
+            widget.items.append(line)
+        }
+    }
+    widget.max_items = 2000
+    widget.scroll = _ystui_max(0, len(widget.items) - 1)
+    return widget
+}
+
+func stream_push(widget, chunk) {
+    assert(widget.kind == "terminal_embed" or widget.kind == "log_viewer" or widget.kind == "stream_widget", "ystui.stream_push requires a stream widget")
+    let new_lines = strings.Split(string(chunk), "\n")
+    for line in new_lines {
+        widget.items.append(line)
+    }
+    while len(widget.items) > widget.max_items {
+        widget.items = widget.items[1:]
+    }
+    widget.scroll = _ystui_max(0, len(widget.items) - 1)
+    widget.value = strings.Join(widget.items, "\n")
+    return widget
+}
+
+func title_bar(title, subtitle = "") {
+    let widget = _ystui_widget("title_bar", title, subtitle)
+    return widget
+}
+
+func status_bar_stack(layers) {
+    return _ystui_widget("status_bar_stack", "", layers)
+}
+
+func tooltip(label, message) {
+    return _ystui_widget("tooltip", label, message)
+}
+
+func context_menu(items, selected = 0) {
+    let widget = _ystui_list("context_menu", "", items, selected)
+    return widget
+}
+
+func modal(title, message, buttons = nil) {
+    let widget = dialog(title, message, buttons)
+    widget.kind = "modal"
+    return widget
+}
+
+func validator(rules) {
+    assert(type(rules) == "dict", "ystui.validator requires a dictionary of rules")
+    return {"kind": "validator", "rules": rules}
+}
+
+func validate(value, rule_set) {
+    assert(rule_set.kind == "validator", "ystui.validate requires a validator")
+    let errors = []
+    let rules = rule_set.rules
+    if rules.get("required", false) and string(value) == "" {
+        errors.append("This field is required")
+    }
+    let value_length = len(strings.ToRunes(string(value)))
+    if rules.get("min_length", 0) > 0 and value_length < rules.min_length {
+        errors.append("Value is shorter than the minimum length")
+    }
+    if rules.get("max_length", 0) > 0 and value_length > rules.max_length {
+        errors.append("Value is longer than the maximum length")
+    }
+    if rules.get("options", nil) != nil and not _ystui_contains(rules.options, value) {
+        errors.append("Value is not one of the allowed options")
+    }
+    return {"valid": len(errors) == 0, "errors": errors}
+}
+
+func wizard(title, steps) {
+    assert(len(steps) > 0, "ystui.wizard requires at least one step")
+    let widget = _ystui_widget("wizard", title, 0)
+    widget.options = []
+    widget.layout = "pages"
+    for step in steps {
+        widget.options.append(string(step))
+    }
+    widget.selected = 0
+    return widget
+}
+
+func command_palette(commands, selected = 0) {
+    return _ystui_command_search("command_palette", commands, selected)
+}
+
+func fuzzy_finder(items, selected = 0) {
+    return _ystui_command_search("fuzzy_finder", items, selected)
+}
+
+func quick_open(items, selected = 0) {
+    return _ystui_command_search("quick_open", items, selected)
+}
+
+func _ystui_command_search(kind, items, selected) {
+    let widget = _ystui_list(kind, "", items, selected)
+    widget.query = ""
+    widget.matches = []
+    _ystui_filter_search(widget)
+    return widget
+}
+
+func _ystui_filter_search(widget) {
+    widget.matches = []
+    let query = strings.ToLower(string(widget.query))
+    let item_index = 0
+    while item_index < len(widget.items) {
+        let item_text = strings.ToLower(_ystui_cell_text(widget.items[item_index]))
+        let is_match = query == "" or strings.Contains(item_text, query)
+        if widget.kind == "fuzzy_finder" and query != "" {
+            is_match = _ystui_fuzzy_match(item_text, query)
+        }
+        if is_match {
+            widget.matches.append(item_index)
+        }
+        item_index = item_index + 1
+    }
+    if len(widget.matches) == 0 {
+        widget.value = 0
+    } else if widget.value >= len(widget.matches) {
+        widget.value = len(widget.matches) - 1
+    }
+}
+
+func _ystui_fuzzy_match(text, query) {
+    let text_runes = strings.ToRunes(text)
+    let query_runes = strings.ToRunes(query)
+    let text_index = 0
+    let query_index = 0
+    while text_index < len(text_runes) and query_index < len(query_runes) {
+        if text_runes[text_index] == query_runes[query_index] {
+            query_index = query_index + 1
+        }
+        text_index = text_index + 1
+    }
+    return query_index == len(query_runes)
+}
+
+func _ystui_expand_tree_item(widget, selected) {
+    if selected < 0 or selected >= len(widget.items) or not widget.item_is_dir[selected] or widget.expanded[selected] {
+        return
+    }
+    let directory = widget.paths[selected]
+    let child_depth = widget.items[selected].depth + 1
+    let entries = io.read_dir(directory)
+    let new_items = []
+    let new_paths = []
+    let new_is_dir = []
+    let new_expanded = []
+    let index = 0
+    while index < len(widget.items) {
+        new_items.append(widget.items[index])
+        new_paths.append(widget.paths[index])
+        new_is_dir.append(widget.item_is_dir[index])
+        new_expanded.append(widget.expanded[index])
+        if index == selected {
+            for entry in entries {
+                new_items.append({
+                "text": entry.name,
+                "depth": child_depth,
+                "path": path.join(directory, entry.name),
+                "is_dir": entry.is_dir,
+            })
+                new_paths.append(path.join(directory, entry.name))
+                new_is_dir.append(entry.is_dir)
+                new_expanded.append(false)
+            }
+            new_expanded[selected] = true
+        }
+        index = index + 1
+    }
+    widget.items = new_items
+    widget.paths = new_paths
+    widget.item_is_dir = new_is_dir
+    widget.expanded = new_expanded
+}
+
+func _ystui_collapse_tree_item(widget, selected) {
+    if selected < 0 or selected >= len(widget.items) {
+        return
+    }
+    let depth = widget.items[selected].depth
+    if widget.expanded[selected] {
+        let new_items = []
+        let new_paths = []
+        let new_is_dir = []
+        let new_expanded = []
+        let index = 0
+        while index < len(widget.items) {
+            let keep = index <= selected
+            if index > selected and widget.items[index].depth <= depth {
+                keep = true
+            }
+            if keep {
+                new_items.append(widget.items[index])
+                new_paths.append(widget.paths[index])
+                new_is_dir.append(widget.item_is_dir[index])
+                new_expanded.append(widget.expanded[index])
+            }
+            index = index + 1
+        }
+        widget.items = new_items
+        widget.paths = new_paths
+        widget.item_is_dir = new_is_dir
+        widget.expanded = new_expanded
+        widget.expanded[selected] = false
+    } else if depth > 0 {
+        let parent_index = selected - 1
+        while parent_index >= 0 {
+            if widget.items[parent_index].depth == depth - 1 {
+                widget.value = parent_index
+                if widget.expanded[parent_index] {
+                    _ystui_collapse_tree_item(widget, parent_index)
+                }
+                return
+            }
+            parent_index = parent_index - 1
+        }
+    }
+}
+
+func file_browser(label, root) {
+    return _ystui_file_picker("file_browser", label, root)
+}
+
+func directory_picker(label, root) {
+    return _ystui_file_picker("directory_picker", label, root)
+}
+
+func _ystui_file_picker(kind, label, root) {
+    let widget = _ystui_widget(kind, label, 0)
+    widget.path = path.clean(path.abs(string(root)))
+    widget.items = []
+    widget.paths = []
+    widget.item_is_dir = []
+    _ystui_load_directory(widget, widget.path)
+    return widget
+}
+
+func _ystui_load_directory(widget, directory) {
+    let entries = io.read_dir(directory)
+    widget.path = path.clean(path.abs(string(directory)))
+    widget.items = ["../"]
+    widget.paths = [path.clean(path.join(widget.path, ".."))]
+    widget.item_is_dir = [true]
+    for entry in entries {
+        if widget.kind == "directory_picker" and not entry.is_dir {
+            continue
+        }
+        let name = string(entry.name)
+        if entry.is_dir {
+            name = name + "/"
+        }
+        widget.items.append(name)
+        widget.paths.append(path.join(widget.path, entry.name))
+        widget.item_is_dir.append(entry.is_dir)
+    }
+    widget.value = 0
+    widget.scroll = 0
+}
+
+func process_monitor(label, limit = 100) {
+    assert(limit > 0, "ystui.process_monitor limit must be positive")
+    let widget = _ystui_widget("process_monitor", label, 0)
+    widget.limit = limit
+    widget.headers = ["PID", "Name", "State", "CPU %", "Memory"]
+    widget.rows = []
+    widget.processes = []
+    refresh_process_monitor(widget)
+    return widget
+}
+
+func refresh_process_monitor(widget) {
+    assert(widget.kind == "process_monitor", "ystui.refresh_process_monitor requires a process monitor")
+    let processes = sys.process_list()
+    widget.processes = processes
+    widget.rows = []
+    let index = 0
+    while index < len(processes) and index < widget.limit {
+        let process = processes[index]
+        widget.rows.append([
+        process.pid,
+        process.name,
+        process.status,
+        process.cpu_percent,
+        process.mem_bytes,
+        ])
+        index = index + 1
+    }
+    widget.value = 0
+    return widget
+}
+
+func progress(label, current, total) {
+    assert(total > 0 and current >= 0 and current <= total, "ystui progress values are out of range")
+    let widget = _ystui_widget("progress", label, current)
+    widget.total = total
+    return widget
+}
+
+func gauge(label, current, total) {
+    let widget = progress(label, current, total)
+    widget.kind = "gauge"
+    return widget
+}
+
+func spinner(label) {
+    return _ystui_widget("spinner", label, 0)
+}
+
+func _ystui_validate_level(level) {
+    assert(level == "info" or level == "success" or level == "warning" or level == "error", "ystui alert level must be info, success, warning, or error")
+}
+
+func alert(title, message, level = "info") {
+    _ystui_validate_level(level)
+    let widget = _ystui_widget("alert", title, message)
+    widget.level = level
+    return widget
+}
+
+func dialog(title, message, buttons = nil) {
+    let choices = buttons
+    if choices == nil {
+        choices = ["OK"]
+    }
+    assert(len(choices) > 0, "ystui dialog requires at least one button")
+    let widget = _ystui_widget("dialog", title, message)
+    widget.buttons = choices
+    widget.selected = 0
+    return widget
+}
+
+func toast(message, level = "info") {
+    _ystui_validate_level(level)
+    let widget = alert("", message, level)
+    widget.kind = "toast"
+    return widget
+}
+
+func container(layout = "column") {
+    assert(layout == "column" or layout == "row" or layout == "grid" or layout == "stack", "unknown ystui container layout")
+    let widget = _ystui_widget("container", "", "")
+    widget.layout = layout
+    return widget
+}
+
+func flex(direction = "column") {
+    let widget = container(direction)
+    widget.kind = "flex"
+    return widget
+}
+
+func grid(columns = 2) {
+    assert(columns > 0, "ystui grid columns must be positive")
+    let widget = container("grid")
+    widget.columns = columns
+    return widget
+}
+
+func split_pane(axis = "row", ratio = 50) {
+    assert((axis == "row" or axis == "column") and ratio > 0 and ratio < 100, "ystui split_pane axis or ratio is invalid")
+    let widget = container(axis)
+    widget.kind = "split_pane"
+    widget.ratio = ratio
+    return widget
+}
+
+func stack() {
+    return container("stack")
+}
+
+func pages() {
+    let widget = container("stack")
+    widget.kind = "pages"
+    widget.layout = "pages"
+    widget.selected = 0
+    return widget
+}
+
+func tabs(labels) {
+    assert(len(labels) > 0, "ystui tabs requires at least one label")
+    let widget = _ystui_widget("tabs", "", 0)
+    widget.options = labels
+    widget.selected = 0
+    return widget
+}
+
+func menu_bar(items, selected = 0) {
+    return _ystui_list("menu_bar", "", items, selected)
+}
+
+func breadcrumb(items) {
+    return _ystui_widget("breadcrumb", "", items)
+}
+
+func hotkey_footer(items) {
+    return _ystui_widget("hotkey_footer", "", items)
+}
+
+func status_bar(items = nil) {
+    if items == nil {
+        items = ""
+    }
+    return _ystui_widget("status_bar", "", items)
+}
+
+func form(label) {
+    let widget = container("column")
+    widget.kind = "form"
+    widget.label = string(label)
+    widget.bordered = true
+    return widget
+}
+
+func form_group(label) {
+    let widget = container("column")
+    widget.kind = "form_group"
+    widget.label = string(label)
+    return widget
+}
+
+@add HEAD
+# add(app, widget, parent?) 将控件加入 app 或容器；返回该控件。
+# 容器参数必须是 app.root 或已加入 app 的容器控件。
+@add END
+func add(app, widget, parent = nil) {
+    assert(widget.id == -1, "ystui widget has already been added")
+    let target = app.root
+    if parent != nil {
+        target = parent
+    }
+    assert(target.__ystui_root == true or (target.id >= 0 and target.id < len(app.widgets)), "ystui parent must already belong to the app")
+    assert(target.kind == "container" or target.kind == "flex" or target.kind == "grid" or
+    target.kind == "split_pane" or target.kind == "stack" or target.kind == "pages" or
+    target.kind == "tabs" or target.kind == "form" or target.kind == "form_group" or target.kind == "wizard",
+    "ystui parent must be a container")
+    widget.id = len(app.widgets)
+    widget.parent = target.id
+    app.widgets.append(widget)
+    target.children.append(widget)
+    if app.focus == -1 and _ystui_focusable(widget) {
+        app.focus = widget.id
+    }
+    return widget
+}
+
+func _ystui_parent(app, widget) {
+    if widget.parent < 0 {
+        return app.root
+    }
+    return app.widgets[widget.parent]
+}
+
+func _ystui_is_page_container(widget) {
+    return widget.kind == "tabs" or widget.kind == "pages" or widget.kind == "wizard"
+}
+
+func _ystui_insert_child(children, child, index) {
+    let output = []
+    let cursor = 0
+    while cursor <= len(children) {
+        if cursor == index {
+            output.append(child)
+        }
+        if cursor < len(children) {
+            output.append(children[cursor])
+        }
+        cursor = cursor + 1
+    }
+    return output
+}
+
+@move HEAD
+# move(app, widget, parent, index?) 将已加入控件移到另一个容器；分页容器的直接页面不可重挂载。
+@move END
+func move(app, widget, parent, index = nil) {
+    let widget_index = _ystui_index(app, widget)
+    let moving = app.widgets[widget_index]
+    let target = parent
+    assert(
+    target.__ystui_root == true or (target.id >= 0 and target.id < len(app.widgets)),
+    "ystui.move parent must belong to the app"
+    )
+    if target.__ystui_root != true {
+        target = app.widgets[target.id]
+    }
+    assert(_ystui_container(target), "ystui.move parent must be a container")
+    let source = _ystui_parent(app, moving)
+    assert(not _ystui_is_page_container(source) and not _ystui_is_page_container(target),
+    "ystui.move cannot move a direct tab, page, or wizard child")
+    let ancestor = target
+    while ancestor.id >= 0 {
+        assert(ancestor.id != moving.id, "ystui.move cannot move a widget into its descendant")
+        if ancestor.parent < 0 {
+            break
+        }
+        ancestor = app.widgets[ancestor.parent]
+    }
+    let target_count = len(target.children)
+    if source.id == target.id {
+        target_count = target_count - 1
+    }
+    let insertion_index = target_count
+    if index != nil {
+        assert(type(index) == "int" and index >= 0 and index <= target_count,
+        "ystui.move index is out of range")
+        insertion_index = index
+    }
+    let source_children = []
+    for child in source.children {
+        if child.id != moving.id {
+            source_children.append(child)
+        }
+    }
+    source.children = source_children
+    if source.id == target.id {
+        target.children = source_children
+    }
+    target.children = _ystui_insert_child(target.children, moving, insertion_index)
+    moving.parent = target.id
+    _ystui_layout_app(app)
+    if app.focus >= 0 and app.widgets[app.focus].hidden {
+        app.focus = -1
+        _ystui_focus(app, 1)
+    }
+    app.previous = nil
+    return moving
+}
+
+func set_bordered(widget, enabled = true) {
+    widget.bordered = enabled
+    return widget
+}
+
+func set_disabled(widget, disabled = true) {
+    widget.disabled = disabled
+    return widget
+}
+
+func theme_set(app, values) {
+    assert(type(values) == "dict", "ystui.theme_set requires a dictionary")
+    for key in values.keys() {
+        app.theme.set(key, values[key])
+    }
+    return app
+}
+
+func _ystui_container(widget) {
+    return widget.kind == "container" or widget.kind == "flex" or widget.kind == "grid" or
+    widget.kind == "split_pane" or widget.kind == "stack" or widget.kind == "pages" or
+    widget.kind == "tabs" or widget.kind == "form" or widget.kind == "form_group" or
+    widget.kind == "wizard"
+}
+
+func _ystui_focusable(widget) {
+    return widget.kind == "button" or widget.kind == "input" or widget.kind == "text_area" or
+    widget.kind == "password" or widget.kind == "search" or widget.kind == "command" or
+    widget.kind == "checkbox" or widget.kind == "select" or widget.kind == "combo_box" or
+    widget.kind == "pick_list" or widget.kind == "radio_group" or
+    widget.kind == "multi_select" or widget.kind == "checkbox_group" or
+    widget.kind == "list" or widget.kind == "virtual_list" or widget.kind == "file_list" or
+    widget.kind == "log_list" or widget.kind == "tree" or widget.kind == "table" or widget.kind == "sortable_table" or
+    widget.kind == "filesystem_tree" or widget.kind == "outline" or widget.kind == "file_browser" or
+    widget.kind == "directory_picker" or widget.kind == "process_monitor" or
+    widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or
+    widget.kind == "stream_widget" or widget.kind == "command_palette" or
+    widget.kind == "fuzzy_finder" or widget.kind == "quick_open" or widget.kind == "context_menu" or
+    widget.kind == "text_editor" or widget.kind == "code_editor" or
+    widget.kind == "menu_bar" or widget.kind == "tabs" or widget.kind == "pages" or
+    widget.kind == "wizard" or widget.kind == "dialog" or widget.kind == "modal"
+}
+
+func _ystui_hide_tree(widget) {
+    widget.hidden = true
+    for child in widget.children {
+        _ystui_hide_tree(child)
+    }
+}
+
+func _ystui_layout(widget, x, y, width, height) {
+    widget.x = x
+    widget.y = y
+    widget.width = _ystui_max(0, width)
+    widget.height = _ystui_max(0, height)
+    widget.hidden = false
+    if not _ystui_container(widget) {
+        return
+    }
+    let children = widget.children
+    let count = len(children)
+    if count == 0 {
+        return
+    }
+    let inset = 0
+    if widget.bordered {
+        inset = 1
+    }
+    let inner_x = x + inset
+    let inner_y = y + inset
+    let inner_width = _ystui_max(0, width - inset * 2)
+    let inner_height = _ystui_max(0, height - inset * 2)
+    if widget.kind == "tabs" or widget.kind == "wizard" {
+        inner_y = inner_y + 1
+        inner_height = _ystui_max(0, inner_height - 1)
+    }
+    if widget.kind == "pages" or widget.kind == "tabs" or widget.kind == "wizard" {
+        let selected = widget.selected
+        if widget.kind == "wizard" and selected >= len(widget.options) {
+            selected = len(widget.options) - 1
+            widget.selected = selected
+        } else if selected >= count {
+            selected = count - 1
+            widget.selected = selected
+        }
+        let page_index = 0
+        while page_index < count {
+            if page_index == selected {
+                _ystui_layout(children[page_index], inner_x, inner_y, inner_width, inner_height)
+            } else {
+                _ystui_hide_tree(children[page_index])
+            }
+            page_index = page_index + 1
+        }
+        return
+    }
+    let layout = widget.layout
+    if widget.kind == "split_pane" {
+        let first_width = int(inner_width * widget.ratio / 100)
+        if layout == "row" {
+            _ystui_layout(children[0], inner_x, inner_y, first_width, inner_height)
+            if count > 1 {
+                _ystui_layout(children[1], inner_x + first_width, inner_y, inner_width - first_width, inner_height)
+            }
+            let split_row_index = 2
+            while split_row_index < count {
+                _ystui_hide_tree(children[split_row_index])
+                split_row_index = split_row_index + 1
+            }
+        } else {
+            let first_height = int(inner_height * widget.ratio / 100)
+            _ystui_layout(children[0], inner_x, inner_y, inner_width, first_height)
+            if count > 1 {
+                _ystui_layout(children[1], inner_x, inner_y + first_height, inner_width, inner_height - first_height)
+            }
+            let split_column_index = 2
+            while split_column_index < count {
+                _ystui_hide_tree(children[split_column_index])
+                split_column_index = split_column_index + 1
+            }
+        }
+        return
+    }
+    if layout == "row" {
+        let row_cell_width = int(inner_width / count)
+        let row_index = 0
+        while row_index < count {
+            let row_child_width = row_cell_width
+            if row_index == count - 1 {
+                row_child_width = inner_width - row_cell_width * row_index
+            }
+            _ystui_layout(children[row_index], inner_x + row_cell_width * row_index, inner_y, row_child_width, inner_height)
+            row_index = row_index + 1
+        }
+    } else if layout == "grid" {
+        let columns = widget.get("columns", 2)
+        let rows = int((count + columns - 1) / columns)
+        let grid_cell_width = int(inner_width / columns)
+        let grid_cell_height = int(inner_height / rows)
+        let grid_index = 0
+        while grid_index < count {
+            let grid_col = grid_index % columns
+            let grid_row = int(grid_index / columns)
+            let grid_child_width = grid_cell_width
+            let grid_child_height = grid_cell_height
+            if grid_col == columns - 1 {
+                grid_child_width = inner_width - grid_cell_width * grid_col
+            }
+            if grid_row == rows - 1 {
+                grid_child_height = inner_height - grid_cell_height * grid_row
+            }
+            _ystui_layout(children[grid_index], inner_x + grid_cell_width * grid_col, inner_y + grid_cell_height * grid_row, grid_child_width, grid_child_height)
+            grid_index = grid_index + 1
+        }
+    } else {
+        let column_cell_height = int(inner_height / count)
+        let column_index = 0
+        while column_index < count {
+            let column_child_height = column_cell_height
+            if column_index == count - 1 {
+                column_child_height = inner_height - column_cell_height * column_index
+            }
+            _ystui_layout(children[column_index], inner_x, inner_y + column_cell_height * column_index, inner_width, column_child_height)
+            column_index = column_index + 1
+        }
+    }
+}
+
+func _ystui_layout_app(app) {
+    app.root.x = 1
+    app.root.y = 3
+    app.root.width = app.width - 2
+    app.root.height = app.height - 5
+    _ystui_layout(app.root, app.root.x, app.root.y, app.root.width, app.root.height)
+}
+
+func _ystui_put(grid, app, x, y, width, text, style = nil) {
+    if width <= 0 or x < 0 or y < 0 {
+        return
+    }
+    let shown = term.text.truncate(string(text), width)
+    let cell_style = {"bg": app.theme.surface}
+    if style != nil {
+        for key in style.keys() {
+            cell_style.set(key, style[key])
+        }
+    }
+    shown = term.style.apply(shown, cell_style)
+    term.output.set(grid, x, y, shown)
+}
+
+func _ystui_box(grid, app, x, y, width, height) {
+    if width < 2 or height < 2 {
+        return
+    }
+    let col = x
+    while col < x + width {
+        _ystui_put(grid, app, col, y, 1, "─")
+        _ystui_put(grid, app, col, y + height - 1, 1, "─")
+        col = col + 1
+    }
+    let row = y
+    while row < y + height {
+        _ystui_put(grid, app, x, row, 1, "│")
+        _ystui_put(grid, app, x + width - 1, row, 1, "│")
+        row = row + 1
+    }
+    _ystui_put(grid, app, x, y, 1, "┌")
+    _ystui_put(grid, app, x + width - 1, y, 1, "┐")
+    _ystui_put(grid, app, x, y + height - 1, 1, "└")
+    _ystui_put(grid, app, x + width - 1, y + height - 1, 1, "┘")
+}
+
+func _ystui_lines(value) {
+    return strings.Split(string(value), "\n")
+}
+
+func _ystui_cell_text(value) {
+    if type(value) == "dict" {
+        return string(value.get("text", value.get("label", "")))
+    }
+    return string(value)
+}
+
+func _ystui_draw_list(grid, app, widget, x, y, width, height) {
+    if height <= 0 or width <= 0 {
+        return
+    }
+    if len(widget.items) == 0 {
+        _ystui_put(grid, app, x, y, width, "(no items)", {"fg": app.theme.muted})
+        return
+    }
+    let first = widget.scroll
+    let row = 0
+    while row < height and first + row < len(widget.items) {
+        let index = first + row
+        let content = _ystui_cell_text(widget.items[index])
+        let selected = index == widget.value
+        let prefix = "  "
+        if selected {
+            prefix = "> "
+        }
+        if (widget.kind == "tree" or widget.kind == "outline" or widget.kind == "filesystem_tree") and type(widget.items[index]) == "dict" {
+            let depth = widget.items[index].get("depth", 0)
+            prefix = strings.Repeat("  ", depth) + prefix
+            if widget.kind == "filesystem_tree" and widget.item_is_dir[index] {
+                let disclosure = "+"
+                if widget.expanded[index] {
+                    disclosure = "-"
+                }
+                prefix = strings.Repeat("  ", depth) + disclosure + " "
+            }
+        }
+        let style = nil
+        if selected {
+            style = {"fg": app.theme.accent, "bold": true}
+        }
+        _ystui_put(grid, app, x, y + row, width, prefix + content, style)
+        row = row + 1
+    }
+}
+
+func _ystui_draw_scrollback(grid, app, widget, x, y, width, height) {
+    let rows = widget.items
+    if widget.kind == "viewport" {
+        rows = _ystui_lines(string(widget.value))
+    }
+    if len(rows) == 0 {
+        _ystui_put(grid, app, x, y, width, "(empty)", {"fg": app.theme.muted})
+        return
+    }
+    let first = _ystui_max(0, widget.scroll)
+    let row = 0
+    while row < height and first + row < len(rows) {
+        _ystui_put(grid, app, x, y + row, width, _ystui_cell_text(rows[first + row]))
+        row = row + 1
+    }
+}
+
+func _ystui_draw_search_results(grid, app, widget, x, y, width, height) {
+    if len(widget.matches) == 0 {
+        _ystui_put(grid, app, x, y, width, "No matches", {"fg": app.theme.muted})
+        return
+    }
+    let first = widget.scroll
+    let row = 0
+    while row < height and first + row < len(widget.matches) {
+        let match_index = first + row
+        let item_index = widget.matches[match_index]
+        let prefix = "  "
+        let style = nil
+        if match_index == widget.value {
+            prefix = "> "
+            style = {"fg": app.theme.accent, "bold": true}
+        }
+        _ystui_put(grid, app, x, y + row, width, prefix + _ystui_cell_text(widget.items[item_index]), style)
+        row = row + 1
+    }
+}
+
+func _ystui_draw_chart(grid, app, widget, x, y, width, height) {
+    if width <= 0 or height <= 0 {
+        return
+    }
+    let minimum = widget.value[0]
+    let maximum = widget.value[0]
+    for number in widget.value {
+        if number < minimum {
+            minimum = number
+        }
+        if number > maximum {
+            maximum = number
+        }
+    }
+    let span = maximum - minimum
+    if widget.kind == "sparkline" {
+        let levels = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+        let rendered = ""
+        for number in widget.value {
+            let level = 0
+            if span > 0 {
+                level = int((number - minimum) * 7 / span)
+            }
+            rendered = rendered + levels[level]
+        }
+        _ystui_put(grid, app, x, y, width, widget.label + " " + rendered, {"fg": app.theme.accent})
+        return
+    }
+    if widget.kind == "bar_chart" {
+        let row = 0
+        while row < height and row < len(widget.value) {
+            let number = widget.value[row]
+            let count = 1
+            if maximum > 0 {
+                count = int(number * _ystui_max(1, width - 14) / maximum)
+            }
+            if number > 0 and count == 0 {
+                count = 1
+            }
+            let bar = strings.Repeat("█", _ystui_min(width, count))
+            _ystui_put(grid, app, x, y + row, width, string(row + 1) + " " + bar + " " + string(number))
+            row = row + 1
+        }
+        return
+    }
+    let plot_height = _ystui_min(height, 8)
+    let plot_width = _ystui_min(width, len(widget.value))
+    let column = 0
+    while column < plot_width {
+        let data_index = int(column * len(widget.value) / _ystui_max(1, plot_width))
+        let number = widget.value[data_index]
+        let point_y = 0
+        if span > 0 and plot_height > 1 {
+            point_y = plot_height - 1 - int((number - minimum) * (plot_height - 1) / span)
+        }
+        _ystui_put(grid, app, x + column, y + point_y, 1, "●", {"fg": app.theme.accent})
+        column = column + 1
+    }
+    _ystui_put(grid, app, x, y + plot_height, width, widget.label + "  min " + string(minimum) + "  max " + string(maximum), {"fg": app.theme.muted})
+}
+
+func _ystui_draw_widget(grid, app, widget) {
+    if widget.hidden or widget.width <= 0 or widget.height <= 0 {
+        return
+    }
+    let x = widget.x
+    let y = widget.y
+    let width = widget.width
+    let height = widget.height
+    if _ystui_container(widget) {
+        if widget.bordered {
+            _ystui_box(grid, app, x, y, width, height)
+            if widget.label != "" and width > 4 {
+                _ystui_put(grid, app, x + 2, y, width - 4, widget.label, {"fg": app.theme.accent, "bold": true})
+            }
+        }
+        if (widget.kind == "tabs" or widget.kind == "wizard") and len(widget.options) > 0 and height > 0 {
+            let titles = []
+            let menu_index = 0
+            while menu_index < len(widget.options) {
+                let tab_title = string(widget.options[menu_index])
+                if menu_index == widget.selected {
+                    tab_title = "[" + string(widget.options[menu_index]) + "]"
+                }
+                titles.append(tab_title)
+                menu_index = menu_index + 1
+            }
+            _ystui_put(grid, app, x, y, width, strings.Join(titles, "  "), {"fg": app.theme.accent})
+        }
+        if widget.kind == "form" and widget.label != "" and height > 0 {
+            _ystui_put(grid, app, x + 2, y, width - 4, widget.label, {"fg": app.theme.accent, "bold": true})
+        }
+        for child in widget.children {
+            _ystui_draw_widget(grid, app, child)
+        }
+        return
+    }
+    if widget.bordered {
+        _ystui_box(grid, app, x, y, width, height)
+    }
+    let inset = 0
+    if widget.bordered {
+        inset = 1
+    }
+    let left = x + inset
+    let top = y + inset
+    let content_width = _ystui_max(0, width - inset * 2)
+    let content_height = _ystui_max(0, height - inset * 2)
+    let focused = widget.id == app.focus and _ystui_focusable(widget)
+    let marker = "  "
+    if focused {
+        marker = "> "
+    }
+    let content = ""
+    let rows = []
+    let row = 0
+    if widget.kind == "text" or widget.kind == "paragraph" or widget.kind == "markdown" or widget.kind == "code_block" {
+        rows = _ystui_lines(widget.label)
+        if widget.kind == "paragraph" and content_width > 0 {
+            rows = _ystui_lines(term.text.wrap(widget.label, content_width))
+        }
+    } else if widget.kind == "button" {
+        content = marker + "[ " + widget.label + " ]"
+        if focused {
+            _ystui_put(grid, app, left, top, content_width, content, {"fg": app.theme.accent, "bold": true, "reverse": true})
+            return
+        }
+    } else if widget.kind == "input" or widget.kind == "search" or widget.kind == "command" or
+    widget.kind == "password" or widget.kind == "text_area" or widget.kind == "text_editor" or
+    widget.kind == "code_editor" {
+        content = widget.value
+        if content == "" and widget.placeholder != "" {
+            content = widget.placeholder
+        }
+        if widget.kind == "password" and widget.value != "" {
+            content = strings.Repeat("*", len(strings.ToRunes(widget.value)))
+        }
+        if widget.kind == "text_area" or widget.kind == "text_editor" or widget.kind == "code_editor" {
+            rows = _ystui_lines(content)
+            if widget.scroll > 0 {
+                rows = rows[widget.scroll:]
+            }
+        } else {
+            if focused and (widget.value != "" or widget.placeholder == "") and widget.cursor <= len(strings.ToRunes(content)) {
+                let runes = strings.ToRunes(content)
+                let before = strings.FromRunes(runes[:widget.cursor])
+                let after = strings.FromRunes(runes[widget.cursor:])
+                content = before + "|" + after
+            }
+            let input_prefix = marker + widget.label + ": "
+            if widget.kind == "search" {
+                input_prefix = marker + "/ " + widget.label + ": "
+            } else if widget.kind == "command" {
+                input_prefix = marker + ": "
+            }
+            content = input_prefix + content
+        }
+    } else if widget.kind == "checkbox" {
+        let checked = " "
+        if widget.value {
+            checked = "x"
+        }
+        content = marker + "[" + checked + "] " + widget.label
+    } else if widget.kind == "select" or widget.kind == "combo_box" or widget.kind == "pick_list" {
+        content = marker + widget.label + ": " + string(widget.options[widget.value]) + "  (←/→)"
+    } else if widget.kind == "radio_group" or widget.kind == "multi_select" or widget.kind == "checkbox_group" {
+        content = marker + widget.label
+        rows.append(content)
+        let option_index = 0
+        while option_index < len(widget.options) {
+            let prefix = "  ( ) "
+            let checked = option_index == widget.value
+            if widget.kind == "multi_select" or widget.kind == "checkbox_group" {
+                checked = _ystui_contains(widget.value, option_index)
+                if checked {
+                    rows.append("  [x] " + string(widget.options[option_index]))
+                } else {
+                    rows.append("  [ ] " + string(widget.options[option_index]))
+                }
+            } else if checked {
+                rows.append("  (*) " + string(widget.options[option_index]))
+            } else {
+                rows.append(prefix + string(widget.options[option_index]))
+            }
+            option_index = option_index + 1
+        }
+    } else if widget.kind == "list" or widget.kind == "virtual_list" or widget.kind == "file_list" or
+    widget.kind == "log_list" or widget.kind == "tree" or widget.kind == "filesystem_tree" or
+    widget.kind == "outline" or widget.kind == "file_browser" or widget.kind == "directory_picker" or
+    widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or
+    widget.kind == "stream_widget" or widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or
+    widget.kind == "quick_open" or widget.kind == "context_menu" {
+        let list_title = marker + widget.label
+        if widget.kind == "file_browser" or widget.kind == "directory_picker" {
+            list_title = marker + widget.label + ": " + widget.path
+        }
+        if widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open" {
+            let search_label = string(widget.get("search_label", "Search"))
+            _ystui_put(grid, app, left, top, content_width, marker + search_label + ": " + widget.query, {"fg": app.theme.accent})
+            _ystui_draw_search_results(grid, app, widget, left, top + 1, content_width, _ystui_max(0, content_height - 1))
+            return
+        }
+        if widget.label != "" {
+            _ystui_put(grid, app, left, top, content_width, list_title, {"fg": app.theme.accent, "bold": true})
+            if widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or widget.kind == "stream_widget" {
+                _ystui_draw_scrollback(grid, app, widget, left, top + 1, content_width, _ystui_max(0, content_height - 1))
+            } else {
+                _ystui_draw_list(grid, app, widget, left, top + 1, content_width, _ystui_max(0, content_height - 1))
+            }
+            return
+        }
+        if widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or widget.kind == "stream_widget" {
+            _ystui_draw_scrollback(grid, app, widget, left, top, content_width, content_height)
+        } else {
+            _ystui_draw_list(grid, app, widget, left, top, content_width, content_height)
+        }
+        return
+    } else if widget.kind == "table" or widget.kind == "sortable_table" or widget.kind == "process_monitor" {
+        let columns = len(widget.headers)
+        let col_width = int(content_width / columns)
+        let column = 0
+        while column < columns {
+            let heading_width = col_width
+            if column == columns - 1 {
+                heading_width = content_width - col_width * column
+            }
+            let heading = string(widget.headers[column])
+            if widget.kind == "sortable_table" and column == widget.sort_column {
+                heading = heading + " v"
+            }
+            _ystui_put(grid, app, left + column * col_width, top, heading_width, heading, {"fg": app.theme.accent, "bold": true})
+            column = column + 1
+        }
+        row = 1
+        while row < content_height and row - 1 < len(widget.rows) {
+            let values = widget.rows[row - 1]
+            column = 0
+            while column < columns and column < len(values) {
+                let data_cell_width = col_width
+                if column == columns - 1 {
+                    data_cell_width = content_width - col_width * column
+                }
+                let data_style = nil
+                if row - 1 == widget.value and _ystui_focusable(widget) {
+                    data_style = {"fg": app.theme.accent, "reverse": true}
+                }
+                _ystui_put(grid, app, left + column * col_width, top + row, data_cell_width, string(values[column]), data_style)
+                column = column + 1
+            }
+            row = row + 1
+        }
+        return
+    } else if widget.kind == "chart" or widget.kind == "line_chart" or widget.kind == "bar_chart" or widget.kind == "sparkline" {
+        _ystui_draw_chart(grid, app, widget, left, top, content_width, content_height)
+        return
+    } else if widget.kind == "canvas" {
+        rows = _ystui_lines(strings.Join(widget.value, "\n"))
+    } else if widget.kind == "progress" or widget.kind == "gauge" {
+        let percent = int(widget.value * 100 / widget.total)
+        let bar_width = _ystui_max(1, content_width - len(widget.label) - 9)
+        let filled = int(percent * bar_width / 100)
+        let bar = ""
+        let index = 0
+        while index < bar_width {
+            if index < filled {
+                bar = bar + "#"
+            } else {
+                bar = bar + "-"
+            }
+            index = index + 1
+        }
+        content = marker + widget.label + " [" + bar + "] " + string(percent) + "%"
+    } else if widget.kind == "spinner" {
+        let spinner_frames = ["|", "/", "-", "\\"]
+        content = marker + spinner_frames[app.frame % len(spinner_frames)] + " " + widget.label
+    } else if widget.kind == "alert" or widget.kind == "toast" {
+        let color = app.theme.accent
+        if widget.level == "success" {
+            color = app.theme.success
+        } else if widget.level == "warning" {
+            color = app.theme.warning
+        } else if widget.level == "error" {
+            color = app.theme.error
+        }
+        content = widget.label + ": " + string(widget.value)
+        _ystui_put(grid, app, left, top, content_width, content, {"fg": color, "bold": true})
+        return
+    } else if widget.kind == "menu_bar" {
+        let menu_parts = []
+        let menu_item_index = 0
+        while menu_item_index < len(widget.items) {
+            let item = " " + string(widget.items[menu_item_index]) + " "
+            if menu_item_index == widget.value {
+                item = "[" + string(widget.items[menu_item_index]) + "]"
+            }
+            menu_parts.append(item)
+            menu_item_index = menu_item_index + 1
+        }
+        content = strings.Join(menu_parts, " ")
+    } else if widget.kind == "breadcrumb" {
+        let breadcrumb_parts = []
+        for item in widget.value {
+            breadcrumb_parts.append(string(item))
+        }
+        content = strings.Join(breadcrumb_parts, " > ")
+    } else if widget.kind == "hotkey_footer" {
+        let hotkey_parts = []
+        for item in widget.value {
+            hotkey_parts.append(string(item.key) + " " + string(item.label))
+        }
+        content = strings.Join(hotkey_parts, "   ")
+    } else if widget.kind == "status_bar" {
+        if type(widget.value) == "dict" {
+            let status_parts = []
+            for key in widget.value.keys() {
+                status_parts.append(string(key) + ": " + string(widget.value[key]))
+            }
+            content = strings.Join(status_parts, "  ")
+        } else {
+            content = string(widget.value)
+        }
+    } else if widget.kind == "status_bar_stack" {
+        let status_parts = []
+        for layer in widget.value {
+            if type(layer) == "dict" {
+                for key in layer.keys() {
+                    status_parts.append(string(key) + ": " + string(layer[key]))
+                }
+            } else {
+                status_parts.append(string(layer))
+            }
+        }
+        content = strings.Join(status_parts, "  │  ")
+    } else if widget.kind == "title_bar" {
+        content = widget.label
+        if string(widget.value) != "" {
+            content = content + " — " + string(widget.value)
+        }
+    } else if widget.kind == "tooltip" {
+        content = widget.label + ": " + string(widget.value)
+    }
+    if len(rows) > 0 {
+        row = 0
+        while row < content_height and row < len(rows) {
+            let shown = string(rows[row])
+            if widget.kind == "code_block" {
+                shown = "│ " + shown
+            }
+            let row_style = nil
+            if focused and row == 0 {
+                row_style = {"fg": app.theme.accent, "bold": true}
+            }
+            _ystui_put(grid, app, left, top + row, content_width, shown, row_style)
+            row = row + 1
+        }
+        return
+    }
+    let style = nil
+    if focused {
+        style = {"fg": app.theme.accent, "bold": true}
+    }
+    if widget.disabled {
+        style = {"fg": app.theme.muted}
+    }
+    _ystui_put(grid, app, left, top, content_width, content, style)
+}
+
+func _ystui_draw_modal(grid, app) {
+    if app.modal == nil {
+        return
+    }
+    let modal = app.modal
+    let width = _ystui_min(app.width - 4, _ystui_max(24, term.text.width(modal.label) + 8))
+    let height = _ystui_min(app.height - 2, 7)
+    let x = int((app.width - width) / 2)
+    let y = int((app.height - height) / 2)
+    _ystui_box(grid, app, x, y, width, height)
+    _ystui_put(grid, app, x + 2, y + 1, width - 4, modal.label, {"fg": app.theme.accent, "bold": true})
+    _ystui_put(grid, app, x + 2, y + 2, width - 4, modal.value)
+    let buttons = []
+    let index = 0
+    while index < len(modal.buttons) {
+        let shown = " " + string(modal.buttons[index]) + " "
+        if index == modal.selected {
+            shown = "[" + string(modal.buttons[index]) + "]"
+        }
+        buttons.append(shown)
+        index = index + 1
+    }
+    _ystui_put(grid, app, x + 2, y + height - 2, width - 4, strings.Join(buttons, "  "), {"fg": app.theme.accent})
+}
+
+func _ystui_frame(app) {
+    _ystui_layout_app(app)
+    let grid = term.output.grid(app.width, app.height)
+    let row = 0
+    let background = strings.Repeat(" ", app.width)
+    while row < app.height {
+        _ystui_put(grid, app, 0, row, app.width, background)
+        row = row + 1
+    }
+    _ystui_box(grid, app, 0, 0, app.width, app.height)
+    _ystui_put(grid, app, 2, 1, app.width - 4, app.title, {"fg": app.theme.accent, "bold": true})
+    let col = 1
+    while col < app.width - 1 {
+        _ystui_put(grid, app, col, 2, 1, "─")
+        col = col + 1
+    }
+    _ystui_put(grid, app, 0, 2, 1, "├")
+    _ystui_put(grid, app, app.width - 1, 2, 1, "┤")
+    for widget in app.widgets {
+        if widget.parent == -1 {
+            _ystui_draw_widget(grid, app, widget)
+        }
+    }
+    if app.toast != "" {
+        let color = app.theme.accent
+        if app.toast_level == "error" {
+            color = app.theme.error
+        } else if app.toast_level == "warning" {
+            color = app.theme.warning
+        } else if app.toast_level == "success" {
+            color = app.theme.success
+        }
+        _ystui_put(grid, app, 2, app.height - 2, app.width - 4, app.toast, {"fg": color, "bold": true})
+    } else {
+        _ystui_put(grid, app, 2, app.height - 2, app.width - 4, app.footer, {"fg": app.theme.muted})
+    }
+    _ystui_draw_modal(grid, app)
+    app.frame = app.frame + 1
+    return grid
+}
+
+@render HEAD
+# render(app) 输出完整 ANSI 帧但不写 stdout；重复渲染时 run() 使用网格差分。
+@render END
+func render(app) {
+    return term.output.render(_ystui_frame(app))
+}
+
+func _ystui_index(app, widget) {
+    let index = widget
+    if type(widget) == "dict" {
+        index = widget.id
+    }
+    assert(index >= 0 and index < len(app.widgets), "ystui widget index is out of range")
+    return index
+}
+
+@value HEAD
+# value(app, widget) 返回控件状态；widget 可为控件对象或索引。
+@value END
+func value(app, widget) {
+    let target = app.widgets[_ystui_index(app, widget)]
+    if target.kind == "tabs" or target.kind == "pages" or target.kind == "wizard" {
+        return target.selected
+    }
+    if target.kind == "list" or target.kind == "virtual_list" or target.kind == "file_list" or
+    target.kind == "tree" or target.kind == "outline" or target.kind == "filesystem_tree" or
+    target.kind == "file_browser" or target.kind == "directory_picker" or
+    target.kind == "menu_bar" or target.kind == "context_menu" or target.kind == "log_list" {
+    if len(target.items) == 0 {
+        return nil
+    }
+    if target.kind == "file_browser" or target.kind == "directory_picker" {
+        return target.paths[target.value]
+    }
+    if target.kind == "filesystem_tree" {
+        return target.paths[target.value]
+    }
+    if target.kind == "menu_bar" or target.kind == "context_menu" {
+        return target.items[target.value]
+    }
+    return target.items[target.value]
+    }
+    if target.kind == "command_palette" or target.kind == "fuzzy_finder" or target.kind == "quick_open" {
+        if len(target.matches) == 0 {
+            return nil
+        }
+        return target.items[target.matches[target.value]]
+    }
+    if target.kind == "process_monitor" or target.kind == "table" or target.kind == "sortable_table" {
+        if len(target.rows) == 0 {
+            return nil
+        }
+        return target.rows[target.value]
+    }
+    return target.value
+}
+
+func _ystui_assign(target, new_value) {
+    if target.kind == "input" or target.kind == "text_area" or target.kind == "password" or
+    target.kind == "search" or target.kind == "command" or target.kind == "text_editor" or target.kind == "code_editor" {
+    let input_value = string(new_value)
+    assert(len(strings.ToRunes(input_value)) <= target.max_length, "ystui input exceeds its maximum length")
+    target.value = input_value
+    target.cursor = len(strings.ToRunes(target.value))
+    } else if target.kind == "checkbox" {
+        assert(type(new_value) == "bool", "ystui checkbox value must be boolean")
+        target.value = new_value
+    } else if target.kind == "select" or target.kind == "combo_box" or target.kind == "pick_list" or target.kind == "radio_group" {
+        assert(new_value >= 0 and new_value < len(target.options), "ystui selected index is out of range")
+        target.value = new_value
+    } else if target.kind == "tabs" or target.kind == "pages" or target.kind == "wizard" {
+        let count = len(target.options)
+        if target.kind == "pages" or target.kind == "wizard" {
+            count = len(target.children)
+        }
+        assert(new_value >= 0 and new_value < count, "ystui page index is out of range")
+        target.selected = new_value
+        target.value = new_value
+    } else if target.kind == "multi_select" or target.kind == "checkbox_group" {
+        assert(type(new_value) == "list", "ystui multi-select value must be a list")
+        for index in new_value {
+            assert(index >= 0 and index < len(target.options), "ystui multi-select index is out of range")
+        }
+        target.value = new_value
+    } else if target.kind == "progress" or target.kind == "gauge" {
+        assert(new_value >= 0 and new_value <= target.total, "ystui progress value is out of range")
+        target.value = new_value
+    } else {
+        assert(false, "ystui value cannot be changed for this widget")
+    }
+}
+
+@set_value HEAD
+# set_value(app, widget, new_value) 按控件类型验证并更新状态。
+@set_value END
+func set_value(app, widget, new_value) {
+    let target = app.widgets[_ystui_index(app, widget)]
+    _ystui_assign(target, new_value)
+    return target.value
+}
+
+func _ystui_focus(app, direction) {
+    let count = len(app.widgets)
+    if count == 0 {
+        app.focus = -1
+        return
+    }
+    let index = app.focus
+    let attempts = 0
+    while attempts < count {
+        index = (index + direction + count) % count
+        let widget = app.widgets[index]
+        if _ystui_focusable(widget) and not widget.hidden and not widget.disabled {
+            app.focus = index
+            return
+        }
+        attempts = attempts + 1
+    }
+    app.focus = -1
+}
+
+func _ystui_cursor_move(widget, delta) {
+    let runes = strings.ToRunes(widget.value)
+    widget.cursor = _ystui_min(len(runes), _ystui_max(0, widget.cursor + delta))
+}
+
+func _ystui_insert(widget, text) {
+    let current = strings.ToRunes(widget.value)
+    let added = strings.ToRunes(text)
+    if len(current) + len(added) > widget.max_length {
+        added = added[:_ystui_max(0, widget.max_length - len(current))]
+    }
+    let updated = current[:widget.cursor]
+    for rune in added {
+        updated.append(rune)
+    }
+    for rune in current[widget.cursor:] {
+        updated.append(rune)
+    }
+    widget.value = strings.FromRunes(updated)
+    widget.cursor = widget.cursor + len(added)
+}
+
+func _ystui_backspace(widget) {
+    let current = strings.ToRunes(widget.value)
+    if widget.cursor > 0 {
+        widget.value = strings.FromRunes(current[:widget.cursor - 1]) + strings.FromRunes(current[widget.cursor:])
+        widget.cursor = widget.cursor - 1
+    }
+}
+
+func _ystui_delete(widget) {
+    let current = strings.ToRunes(widget.value)
+    if widget.cursor < len(current) {
+        widget.value = strings.FromRunes(current[:widget.cursor]) + strings.FromRunes(current[widget.cursor + 1:])
+    }
+}
+
+func _ystui_toggle_selected(items, selected) {
+    let output = []
+    let found = false
+    for item in items {
+        if item == selected {
+            found = true
+        } else {
+            output.append(item)
+        }
+    }
+    if not found {
+        output.append(selected)
+    }
+    return output
+}
+
+func _ystui_sort_rows(widget) {
+    let column = widget.sort_column
+    let i = 0
+    while i < len(widget.rows) {
+        let smallest = i
+        let j = i + 1
+        while j < len(widget.rows) {
+            if string(widget.rows[j][column]) < string(widget.rows[smallest][column]) {
+                smallest = j
+            }
+            j = j + 1
+        }
+        if smallest != i {
+            let temporary = widget.rows[i]
+            widget.rows[i] = widget.rows[smallest]
+            widget.rows[smallest] = temporary
+        }
+        i = i + 1
+    }
+}
+
+func _ystui_activate_button(app, label) {
+    app.last_action = string(label)
+    app.running = false
+}
+
+func _ystui_key(app, key, raw) {
+    if app.modal != nil {
+        let modal = app.modal
+        if key == "escape" {
+            app.modal = nil
+        } else if key == "left" or key == "shift-tab" {
+            modal.selected = (modal.selected - 1 + len(modal.buttons)) % len(modal.buttons)
+        } else if key == "right" or key == "tab" {
+            modal.selected = (modal.selected + 1) % len(modal.buttons)
+        } else if key == "enter" {
+            app.last_action = string(modal.buttons[modal.selected])
+            app.modal = nil
+            app.running = false
+        }
+        return
+    }
+    if key == "ctrl-c" or key == "ctrl-d" {
+        app.running = false
+        return
+    }
+    if key == "tab" {
+        _ystui_focus(app, 1)
+        return
+    }
+    if key == "shift-tab" {
+        _ystui_focus(app, -1)
+        return
+    }
+    if app.focus < 0 or app.focus >= len(app.widgets) {
+        return
+    }
+    let widget = app.widgets[app.focus]
+    if widget.disabled or widget.hidden {
+        return
+    }
+    let vertical_navigation = widget.kind == "select" or widget.kind == "combo_box" or
+    widget.kind == "pick_list" or widget.kind == "radio_group" or
+    widget.kind == "multi_select" or widget.kind == "checkbox_group" or
+    widget.kind == "list" or widget.kind == "virtual_list" or widget.kind == "file_list" or
+    widget.kind == "log_list" or widget.kind == "tree" or widget.kind == "table" or
+    widget.kind == "sortable_table" or widget.kind == "filesystem_tree" or widget.kind == "outline" or
+    widget.kind == "file_browser" or widget.kind == "directory_picker" or widget.kind == "process_monitor" or
+    widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or
+    widget.kind == "stream_widget" or widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or
+    widget.kind == "quick_open" or widget.kind == "context_menu" or
+    widget.kind == "tabs" or widget.kind == "pages" or widget.kind == "wizard"
+    if (key == "up" or key == "down") and not vertical_navigation {
+        if key == "up" {
+            _ystui_focus(app, -1)
+        } else {
+            _ystui_focus(app, 1)
+        }
+        return
+    }
+    if widget.kind == "button" and key == "enter" {
+        _ystui_activate_button(app, widget.label)
+    } else if (widget.kind == "context_menu" or widget.kind == "menu_bar") and key == "enter" and len(widget.items) > 0 {
+        _ystui_activate_button(app, string(widget.items[widget.value]))
+    } else if widget.kind == "checkbox" and (key == " " or key == "enter") {
+        widget.value = not widget.value
+    } else if (widget.kind == "select" or widget.kind == "combo_box" or widget.kind == "pick_list" or widget.kind == "radio_group") and (key == "left" or key == "up") {
+        widget.value = (widget.value - 1 + len(widget.options)) % len(widget.options)
+    } else if (widget.kind == "select" or widget.kind == "combo_box" or widget.kind == "pick_list" or widget.kind == "radio_group") and (key == "right" or key == "down") {
+        widget.value = (widget.value + 1) % len(widget.options)
+    } else if (widget.kind == "multi_select" or widget.kind == "checkbox_group") and (key == "left" or key == "up") {
+        widget.selected = (widget.selected - 1 + len(widget.options)) % len(widget.options)
+    } else if (widget.kind == "multi_select" or widget.kind == "checkbox_group") and (key == "right" or key == "down") {
+        widget.selected = (widget.selected + 1) % len(widget.options)
+    } else if (widget.kind == "multi_select" or widget.kind == "checkbox_group") and (key == " " or key == "enter") {
+        widget.value = _ystui_toggle_selected(widget.value, widget.selected)
+    } else if widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open" {
+        if key == "backspace" {
+            let query_runes = strings.ToRunes(widget.query)
+            if len(query_runes) > 0 {
+                widget.query = strings.FromRunes(query_runes[:len(query_runes) - 1])
+                widget.value = 0
+                widget.scroll = 0
+                _ystui_filter_search(widget)
+            }
+        } else if key == "up" {
+            widget.value = _ystui_max(0, widget.value - 1)
+        } else if key == "down" {
+            widget.value = _ystui_min(_ystui_max(0, len(widget.matches) - 1), widget.value + 1)
+        } else if key == "enter" and len(widget.matches) > 0 {
+            _ystui_activate_button(app, string(widget.items[widget.matches[widget.value]]))
+        } else if raw == key and term.text.width(key) > 0 {
+            widget.query = widget.query + key
+            widget.value = 0
+            widget.scroll = 0
+            _ystui_filter_search(widget)
+        }
+    } else if widget.kind == "file_browser" or widget.kind == "directory_picker" {
+        if key == "up" {
+            widget.value = _ystui_max(0, widget.value - 1)
+        } else if key == "down" {
+            widget.value = _ystui_min(len(widget.items) - 1, widget.value + 1)
+        } else if key == "backspace" or key == "left" {
+            _ystui_load_directory(widget, path.clean(path.join(widget.path, "..")))
+        } else if key == "enter" and len(widget.items) > 0 {
+            if widget.item_is_dir[widget.value] {
+                _ystui_load_directory(widget, widget.paths[widget.value])
+            } else if widget.kind == "file_browser" {
+                _ystui_activate_button(app, widget.paths[widget.value])
+            }
+        }
+    } else if widget.kind == "filesystem_tree" {
+        if key == "right" and len(widget.items) > 0 and widget.item_is_dir[widget.value] {
+            _ystui_expand_tree_item(widget, widget.value)
+        } else if key == "left" and len(widget.items) > 0 {
+            _ystui_collapse_tree_item(widget, widget.value)
+        } else if key == "up" {
+            widget.value = _ystui_max(0, widget.value - 1)
+        } else if key == "down" {
+            widget.value = _ystui_min(len(widget.items) - 1, widget.value + 1)
+        } else if key == "enter" and len(widget.items) > 0 {
+            if widget.item_is_dir[widget.value] {
+                if widget.expanded[widget.value] {
+                    _ystui_collapse_tree_item(widget, widget.value)
+                } else {
+                    _ystui_expand_tree_item(widget, widget.value)
+                }
+            } else {
+                _ystui_activate_button(app, widget.paths[widget.value])
+            }
+        }
+    } else if widget.kind == "list" or widget.kind == "virtual_list" or widget.kind == "file_list" or
+    widget.kind == "log_list" or widget.kind == "tree" or widget.kind == "outline" or
+    widget.kind == "menu_bar" or widget.kind == "context_menu" or widget.kind == "table" or
+    widget.kind == "sortable_table" or widget.kind == "process_monitor" or
+    widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or
+    widget.kind == "stream_widget" {
+        let count = len(widget.items)
+        if widget.kind == "table" or widget.kind == "sortable_table" or widget.kind == "process_monitor" {
+            count = len(widget.rows)
+        }
+        if widget.kind == "viewport" or widget.kind == "terminal_embed" or widget.kind == "log_viewer" or widget.kind == "stream_widget" {
+            if key == "up" {
+                widget.scroll = _ystui_max(0, widget.scroll - 1)
+            } else if key == "down" {
+                widget.scroll = _ystui_min(_ystui_max(0, len(widget.items) - 1), widget.scroll + 1)
+            } else if key == "home" {
+                widget.scroll = 0
+            } else if key == "end" {
+                widget.scroll = _ystui_max(0, len(widget.items) - 1)
+            }
+        } else if (widget.kind == "menu_bar" or widget.kind == "context_menu") and (key == "left" or key == "right") and count > 0 {
+            if key == "left" {
+                widget.value = (widget.value - 1 + count) % count
+            } else {
+                widget.value = (widget.value + 1) % count
+            }
+        } else if key == "up" {
+            widget.value = _ystui_max(0, widget.value - 1)
+        } else if key == "down" {
+            widget.value = _ystui_min(_ystui_max(0, count - 1), widget.value + 1)
+        } else if widget.kind == "sortable_table" and key == "s" and len(widget.headers) > 0 {
+            widget.sort_column = (widget.sort_column + 1) % len(widget.headers)
+            _ystui_sort_rows(widget)
+        } else if widget.kind == "menu_bar" and key == "enter" and count > 0 {
+            _ystui_activate_button(app, widget.items[widget.value])
+        }
+        if count > 0 {
+            let visible = _ystui_max(1, widget.height - 1)
+            if widget.value < widget.scroll {
+                widget.scroll = widget.value
+            } else if widget.value >= widget.scroll + visible {
+                widget.scroll = widget.value - visible + 1
+            }
+        }
+    } else if widget.kind == "tabs" or widget.kind == "pages" or widget.kind == "wizard" {
+        let count = len(widget.options)
+        if widget.kind == "pages" or widget.kind == "wizard" {
+            count = len(widget.children)
+        }
+        if widget.kind == "wizard" and key == "enter" and count > 0 {
+            if widget.selected < count - 1 {
+                widget.selected = widget.selected + 1
+                app.last_action = ""
+            } else {
+                app.last_action = string(widget.options[widget.selected])
+                app.running = false
+            }
+        } else if count > 0 and (key == "left" or key == "up") {
+            widget.selected = (widget.selected - 1 + count) % count
+        } else if count > 0 and (key == "right" or key == "down") {
+            widget.selected = (widget.selected + 1) % count
+        }
+        _ystui_layout_app(app)
+    } else if widget.kind == "input" or widget.kind == "password" or widget.kind == "search" or
+    widget.kind == "command" or widget.kind == "text_area" or widget.kind == "text_editor" or widget.kind == "code_editor" {
+        if key == "left" {
+            _ystui_cursor_move(widget, -1)
+        } else if key == "right" {
+            _ystui_cursor_move(widget, 1)
+        } else if key == "home" {
+            widget.cursor = 0
+        } else if key == "end" {
+            widget.cursor = len(strings.ToRunes(widget.value))
+        } else if key == "backspace" {
+            _ystui_backspace(widget)
+        } else if key == "delete" {
+            _ystui_delete(widget)
+        } else if (widget.kind == "text_area" or widget.kind == "text_editor" or widget.kind == "code_editor") and key == "enter" {
+            _ystui_insert(widget, "\n")
+        } else if (widget.kind == "command" or widget.kind == "search") and key == "enter" {
+            _ystui_activate_button(app, widget.value)
+        } else if raw == key and term.text.width(key) > 0 {
+            _ystui_insert(widget, key)
+        }
+    }
+}
+
+func _ystui_can_drag(app, widget) {
+    let parent = _ystui_parent(app, widget)
+    return len(parent.children) > 1 and not _ystui_is_page_container(parent) and parent.kind != "split_pane"
+}
+
+func _ystui_drag_to(app, x, y) {
+    if app.drag_widget < 0 or app.drag_widget >= len(app.widgets) {
+        return
+    }
+    let moving = app.widgets[app.drag_widget]
+    let parent = _ystui_parent(app, moving)
+    if parent.kind == "container" and parent.__ystui_root == true {
+        return
+    }
+    let target = nil
+    let index = len(app.widgets) - 1
+    while index >= 0 {
+        let candidate = app.widgets[index]
+        if candidate.id != moving.id and not candidate.hidden and candidate.parent == moving.parent and
+        x >= candidate.x and x < candidate.x + candidate.width and
+        y >= candidate.y and y < candidate.y + candidate.height {
+            target = candidate
+            break
+        }
+        index = index - 1
+    }
+    if target == nil {
+        return
+    }
+    let target_index = -1
+    let child_index = 0
+    while child_index < len(parent.children) {
+        if parent.children[child_index].id == target.id {
+            target_index = child_index
+            break
+        }
+        child_index = child_index + 1
+    }
+    let moving_index = -1
+    child_index = 0
+    while child_index < len(parent.children) {
+        if parent.children[child_index].id == moving.id {
+            moving_index = child_index
+            break
+        }
+        child_index = child_index + 1
+    }
+    if target_index < 0 or moving_index < 0 {
+        return
+    }
+    let after = false
+    if parent.layout == "row" {
+        after = x >= target.x + int(target.width / 2)
+    } else if parent.layout == "grid" {
+        let columns = parent.get("columns", 2)
+        let moving_row = int(moving_index / columns)
+        let target_row = int(target_index / columns)
+        if moving_row == target_row {
+            after = x >= target.x + int(target.width / 2)
+        } else {
+            after = y >= target.y + int(target.height / 2)
+        }
+    } else {
+        after = y >= target.y + int(target.height / 2)
+    }
+    let insertion_index = target_index
+    if after {
+        insertion_index = insertion_index + 1
+    }
+    if moving_index < insertion_index {
+        insertion_index = insertion_index - 1
+    }
+    if insertion_index != moving_index {
+        move(app, moving, parent, insertion_index)
+        app.drag_moved = true
+        app.pending_click = -1
+    }
+}
+
+func _ystui_mouse(app, event) {
+    if event.key == "release" {
+        if app.pending_click >= 0 and not app.drag_moved {
+            let clicked = app.widgets[app.pending_click]
+            let x = event.x - 1
+            let y = event.y - 1
+            if x >= clicked.x and x < clicked.x + clicked.width and
+            y >= clicked.y and y < clicked.y + clicked.height {
+                _ystui_activate_button(app, clicked.label)
+            }
+        }
+        app.drag_widget = -1
+        app.pending_click = -1
+        app.drag_moved = false
+        return
+    }
+    if event.key == "move" {
+        if app.drag_widget >= 0 and event.button >= 32 and event.button % 4 == 0 {
+            _ystui_drag_to(app, event.x - 1, event.y - 1)
+        }
+        return
+    }
+    if event.key == "unknown" {
+        return
+    }
+    let x = event.x - 1
+    let y = event.y - 1
+    if app.modal != nil {
+        let modal = app.modal
+        let modal_width = _ystui_min(app.width - 4, _ystui_max(24, term.text.width(modal.label) + 8))
+        let modal_height = _ystui_min(app.height - 2, 7)
+        let modal_x = int((app.width - modal_width) / 2)
+        let modal_y = int((app.height - modal_height) / 2)
+        if y == modal_y + modal_height - 2 {
+            let button_x = modal_x + 2
+            let button_index = 0
+            while button_index < len(modal.buttons) {
+                let button_label = " " + string(modal.buttons[button_index]) + " "
+                if button_index == modal.selected {
+                    button_label = "[" + string(modal.buttons[button_index]) + "]"
+                }
+                let button_width = term.text.width(button_label)
+                if x >= button_x and x < button_x + button_width {
+                    modal.selected = button_index
+                    app.last_action = string(modal.buttons[button_index])
+                    app.modal = nil
+                    app.running = false
+                    return
+                }
+                button_x = button_x + button_width + 2
+                button_index = button_index + 1
+            }
+        }
+        return
+    }
+    if event.key == "button-0" {
+        let candidate_index = len(app.widgets) - 1
+        while candidate_index >= 0 {
+            let candidate = app.widgets[candidate_index]
+            if not candidate.hidden and not candidate.disabled and
+            x >= candidate.x and x < candidate.x + candidate.width and
+            y >= candidate.y and y < candidate.y + candidate.height {
+                if _ystui_can_drag(app, candidate) {
+                    app.drag_widget = candidate.id
+                    app.drag_moved = false
+                }
+                break
+            }
+            candidate_index = candidate_index - 1
+        }
+    }
+    let widget_index = len(app.widgets) - 1
+    while widget_index >= 0 {
+        let widget = app.widgets[widget_index]
+        if not widget.hidden and not widget.disabled and _ystui_focusable(widget) and
+        x >= widget.x and x < widget.x + widget.width and
+        y >= widget.y and y < widget.y + widget.height {
+        app.focus = widget.id
+        if widget.kind == "checkbox" {
+            widget.value = not widget.value
+        } else if widget.kind == "list" or widget.kind == "virtual_list" or widget.kind == "file_list" or
+        widget.kind == "log_list" or widget.kind == "tree" or widget.kind == "outline" or
+        widget.kind == "filesystem_tree" or widget.kind == "file_browser" or widget.kind == "directory_picker" or
+        widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open" or
+        widget.kind == "context_menu" {
+            if len(widget.items) > 0 {
+                if event.key == "wheel-up" {
+                    widget.value = _ystui_max(0, widget.value - 1)
+                } else if event.key == "wheel-down" {
+                    let item_count = len(widget.items)
+                    if widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open" {
+                        item_count = len(widget.matches)
+                    }
+                    widget.value = _ystui_min(_ystui_max(0, item_count - 1), widget.value + 1)
+                } else {
+                    let item_offset = 0
+                    if widget.label != "" {
+                        item_offset = 1
+                    } else if widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open" {
+                        item_offset = 1
+                    }
+                    if widget.bordered {
+                        item_offset = item_offset + 1
+                    }
+                    let item_count = len(widget.items)
+                    if widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open" {
+                        item_count = len(widget.matches)
+                    }
+                    widget.value = _ystui_min(_ystui_max(0, item_count - 1), _ystui_max(0, widget.scroll + y - widget.y - item_offset))
+                    if widget.kind == "filesystem_tree" and widget.item_is_dir[widget.value] {
+                        if widget.expanded[widget.value] {
+                            _ystui_collapse_tree_item(widget, widget.value)
+                        } else {
+                            _ystui_expand_tree_item(widget, widget.value)
+                        }
+                    } else if (widget.kind == "file_browser" or widget.kind == "directory_picker") and
+                    widget.item_is_dir[widget.value] {
+                        _ystui_load_directory(widget, widget.paths[widget.value])
+                    } else if (widget.kind == "command_palette" or widget.kind == "fuzzy_finder" or widget.kind == "quick_open") and len(widget.matches) > 0 {
+                        let matched_index = widget.matches[widget.value]
+                        _ystui_activate_button(app, _ystui_cell_text(widget.items[matched_index]))
+                    }
+                }
+                let visible_rows = _ystui_max(1, widget.height - 1)
+                if widget.value < widget.scroll {
+                    widget.scroll = widget.value
+                } else if widget.value >= widget.scroll + visible_rows {
+                    widget.scroll = widget.value - visible_rows + 1
+                }
+            }
+        } else if widget.kind == "table" or widget.kind == "sortable_table" or widget.kind == "process_monitor" {
+            if len(widget.rows) > 0 {
+                let row_offset = 1
+                if widget.bordered {
+                    row_offset = row_offset + 1
+                }
+                widget.value = _ystui_min(len(widget.rows) - 1, _ystui_max(0, widget.scroll + y - widget.y - row_offset))
+            }
+        } else if widget.kind == "menu_bar" {
+            widget.value = _ystui_min(len(widget.items) - 1, _ystui_max(0, widget.scroll + x - widget.x))
+        } else if widget.kind == "button" {
+            if app.drag_widget == widget.id {
+                app.pending_click = widget.id
+            } else {
+                _ystui_activate_button(app, widget.label)
+            }
+        } else if widget.kind == "select" or widget.kind == "combo_box" or widget.kind == "pick_list" {
+            widget.value = (widget.value + 1) % len(widget.options)
+        } else if widget.kind == "radio_group" {
+            let option_index = y - widget.y - 1
+            if option_index >= 0 and option_index < len(widget.options) {
+                widget.value = option_index
+            }
+        } else if widget.kind == "multi_select" or widget.kind == "checkbox_group" {
+            let option_index = y - widget.y - 1
+            if option_index >= 0 and option_index < len(widget.options) {
+                widget.selected = option_index
+                widget.value = _ystui_toggle_selected(widget.value, option_index)
+            }
+        } else if widget.kind == "input" or widget.kind == "password" or widget.kind == "search" or
+        widget.kind == "command" or widget.kind == "text_area" or widget.kind == "text_editor" or widget.kind == "code_editor" {
+            let inset = 0
+            if widget.bordered {
+                inset = 1
+            }
+            let marker = "  "
+            if widget.id == app.focus {
+                marker = "> "
+            }
+            let input_prefix = marker + widget.label + ": "
+            if widget.kind == "search" {
+                input_prefix = marker + "/ " + widget.label + ": "
+            } else if widget.kind == "command" {
+                input_prefix = marker + ": "
+            }
+            let cursor_x = x - widget.x - inset - term.text.width(input_prefix)
+            widget.cursor = _ystui_min(len(strings.ToRunes(widget.value)), _ystui_max(0, cursor_x))
+        } else if widget.kind == "tabs" or widget.kind == "wizard" {
+            if event.key == "wheel-up" {
+                widget.selected = (widget.selected - 1 + len(widget.options)) % len(widget.options)
+                _ystui_layout_app(app)
+            } else if event.key == "wheel-down" {
+                widget.selected = (widget.selected + 1) % len(widget.options)
+                _ystui_layout_app(app)
+            } else if y == widget.y {
+                let tab_x = widget.x
+                let tab_index = 0
+                while tab_index < len(widget.options) {
+                    let tab_title = string(widget.options[tab_index])
+                    if tab_index == widget.selected {
+                        tab_title = "[" + string(widget.options[tab_index]) + "]"
+                    }
+                    let tab_width = term.text.width(tab_title)
+                    if x >= tab_x and x < tab_x + tab_width {
+                        widget.selected = tab_index
+                        _ystui_layout_app(app)
+                        break
+                    }
+                    tab_x = tab_x + tab_width + 2
+                    tab_index = tab_index + 1
+                }
+            }
+        }
+        return
+        }
+        widget_index = widget_index - 1
+    }
+}
+
+@handle HEAD
+# handle(app, events) 处理 term.input 产生的键盘与鼠标事件，不直接读取输入设备。
+@handle END
+func handle(app, events) {
+    _ystui_layout_app(app)
+    for event in events {
+        if app.running {
+            if event.type == "key" {
+                _ystui_key(app, event.key, event.raw)
+            } else if event.type == "mouse" and app.mouse {
+                _ystui_mouse(app, event)
+            }
+        }
+    }
+    return app
+}
+
+func show_dialog(app, widget) {
+    assert(widget.kind == "dialog" or widget.kind == "modal", "ystui.show_dialog requires a dialog or modal")
+    app.modal = widget
+    return app
+}
+
+func close_dialog(app) {
+    app.modal = nil
+    return app
+}
+
+func notify(app, message, level = "info") {
+    _ystui_validate_level(level)
+    app.toast = string(message)
+    app.toast_level = string(level)
+    return app
+}
+
+func dismiss_toast(app) {
+    app.toast = ""
+    return app
+}
+
+func activated(app) {
+    return app.last_action
+}
+
+func _ystui_refresh(app) {
+    let frame = _ystui_frame(app)
+    term.output.flush(term.output.render(frame))
+    app.previous = frame
+}
+
+func _ystui_restore_terminal(mouse_enabled, resize_watcher) {
+    if resize_watcher {
+        term.screen.stop_resize_watch()
+    }
+    let cleanup = term.screen.show_cursor()
+    if mouse_enabled {
+        cleanup = term.screen.mouse(false) + cleanup
+    }
+    cleanup = cleanup + term.screen.alt_screen(false)
+    term.output.flush(cleanup)
+    term.io.mode(0, "normal")
+}
+
+@run HEAD
+# run(app) 在 TTY 中进入 raw/alternate-screen 模式，支持键盘、鼠标（若启用）和 Ctrl-C/D 退出。
+# 按钮、命令或搜索项被激活时返回控制权；终端状态通过 defer 恢复。
+@run END
+func run(app) {
+    assert(term.env.is_tty(0) and term.env.is_tty(1), "ystui.run requires stdin and stdout to be terminals")
+    let capabilities = term.cap.detect()
+    assert(not capabilities.dumb and capabilities.alt_screen and capabilities.cursor, "ystui.run requires cursor and alternate-screen support")
+    let terminal_size = term.screen.size()
+    let requested_width = app.width
+    let requested_height = app.height
+    let follows_terminal_width = requested_width >= terminal_size.width
+    let follows_terminal_height = requested_height >= terminal_size.height
+    app.width = _ystui_min(requested_width, terminal_size.width)
+    app.height = _ystui_min(requested_height, terminal_size.height)
+    assert(app.width >= 12 and app.height >= 7, "ystui terminal dimensions must be at least 12x7")
+    let resize_watcher = term.screen.watch_resize()
+    let last_resize_count = term.screen.resize_count()
+    term.io.mode(0, "raw")
+    let mouse_enabled = app.mouse and capabilities.mouse
+    let mouse_sequence = ""
+    if mouse_enabled {
+        mouse_sequence = term.screen.mouse(true)
+    }
+    # Defer a plain function call; deferred namespace-method calls execute eagerly.
+    defer _ystui_restore_terminal(mouse_enabled, resize_watcher)
+    term.output.flush(term.screen.alt_screen(true) + term.screen.hide_cursor() + mouse_sequence)
+    app.running = true
+    app.last_action = ""
+    app.previous = nil
+    _ystui_refresh(app)
+    let pending = ""
+    let resize_polling_supported = term.input.get("read", nil) != nil
+    while app.running {
+        let chunk = ""
+        if resize_polling_supported {
+            chunk = term.input.read(50)
+        } else {
+            chunk = stdio.getchar()
+        }
+        let resize_count = term.screen.resize_count()
+        let resize_changed = resize_polling_supported and resize_count != last_resize_count
+        if resize_changed {
+            last_resize_count = resize_count
+            let next_size = term.screen.size()
+            let next_width = requested_width
+            let next_height = requested_height
+            if follows_terminal_width {
+                next_width = next_size.width
+            } else {
+                next_width = _ystui_min(requested_width, next_size.width)
+            }
+            if follows_terminal_height {
+                next_height = next_size.height
+            } else {
+                next_height = _ystui_min(requested_height, next_size.height)
+            }
+            if next_width >= 12 and next_height >= 7 {
+                app.width = next_width
+                app.height = next_height
+                app.resize_suspended = false
+                app.previous = nil
+                term.output.flush(term.screen.clear())
+            } else {
+                app.resize_suspended = true
+                app.previous = nil
+                term.output.flush(term.screen.clear())
+            }
+        }
+        let parsed = term.input.parse_chunk(chunk, pending)
+        pending = parsed.pending
+        if len(parsed.events) > 0 {
+            handle(app, parsed.events)
+        }
+        if app.running and not app.resize_suspended and (len(parsed.events) > 0 or resize_changed) {
+            _ystui_refresh(app)
+        }
+    }
+    return app
+}

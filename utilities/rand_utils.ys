@@ -1,0 +1,84 @@
+package rand_utils
+import ["rand", "array"]
+
+@token HEAD
+# token generates length random characters from charset.
+# charset may be a rand.string preset ("alpha", "alnum", "hex", "ascii") or a literal character pool.
+#   Empty pools and invalid lengths follow rand.string error behavior; generated characters are selected from the
+#   standard RNG.
+@token END
+func token(length, charset) {
+    return rand.string(length, charset)
+}
+
+@pick_or HEAD
+# pick_or returns a random element of values, or fallback when values is empty.
+# values must be a list for non-empty input; rand.choice's type or runtime errors are propagated. The
+#   fallback is returned unchanged for an empty list.
+@pick_or END
+func pick_or(values, fallback) {
+    if len(values) == 0 {
+        return fallback
+    }
+    return rand.choice(values)
+}
+
+@shuffled HEAD
+# shuffled returns a shuffled copy of values without shuffling the input list.
+# array.Copy makes a deep copy of nested lists before rand.shuffle is applied. Returns the copied list;
+#   invalid input follows array.Copy/rand.shuffle errors.
+@shuffled END
+func shuffled(values) {
+    return rand.shuffle(array.Copy(values))
+}
+
+@unique_id HEAD
+# unique_id returns a randomly generated UUID string from rand.uuid.
+# The result format is the standard library's UUID v4-shaped representation; this pseudo-random generator
+#   is not a cryptographic-randomness guarantee.
+@unique_id END
+func unique_id() {
+    return rand.uuid()
+}
+
+@temp_name HEAD
+# temp_name combines prefix with a random filename carrying extension.
+# extension is passed verbatim to rand.filename (include a dot if required); returns a name, not a
+#   reserved or created filesystem path.
+@temp_name END
+func temp_name(prefix, extension) {
+    return string(prefix) + rand.filename(string(extension))
+}
+
+@rand_utils_int_between HEAD
+# rand_utils_int_between returns a random integer in the inclusive range
+# [minimum, maximum]. The arguments are passed to rand.int; minimum greater than maximum and other
+#   invalid-range conditions are reported by that standard function.
+@rand_utils_int_between END
+func rand_utils_int_between(minimum, maximum) {
+    return rand.int(minimum, maximum)
+}
+
+@rand_utils_token_default HEAD
+# 生成指定长度的随机字符串；未提供 charset 时默认使用字母与数字字符集 alnum。
+# 自定义 charset 或 rand.string 预设均可用；字符集为空、长度无效等错误遵循 rand.string。
+# 底层 RNG 不承诺密码学安全，不应用于密钥或安全令牌。
+@rand_utils_token_default END
+func rand_utils_token_default(length, charset) {
+    let actual_charset = charset
+    if actual_charset == nil or actual_charset == "" {
+        actual_charset = "alnum"
+    }
+    return rand.string(length, actual_charset)
+}
+
+@rand_utils_sample HEAD
+# 从 values 中无放回随机抽取 count 个元素，并返回随机顺序的新列表。
+# count 必须在 0 与 len(values) 之间；越界时明确报错；抽样和洗牌使用标准库 RNG。
+@rand_utils_sample END
+func rand_utils_sample(values, count) {
+    assert(count >= 0 and count <= len(values), "sample size must be between zero and list length")
+    let pool = array.Copy(values)
+    let mixed = rand.shuffle(pool)
+    return mixed[:count]
+}

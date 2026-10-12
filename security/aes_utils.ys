@@ -1,0 +1,52 @@
+package aes_utils
+import ["aes", "json"]
+
+@aes_encrypt_text HEAD
+# aes_encrypt_text(plaintext, key, iv, mode) 将明文字符串按 AES CBC/CTR 加密并返回 bytes
+#   密文。
+# mode 缺省或空字符串时使用 CBC；key 必须为 16/24/32 字节， iv 必须恰为 16
+#   字节，否则底层分组模式初始化可能失败或触发运行时错误。 CBC 会做 PKCS#7
+#   填充但不提供认证；
+#   CTR 不填充且不提供完整性保护。 非法 key/mode 会报错；CBC/CTR 均不适合直接保护需要真实性校验的数据。
+@aes_encrypt_text END
+func aes_encrypt_text(plaintext, key, iv, mode) {
+    let actual_mode = "CBC"
+    if mode != nil and mode != "" {
+        actual_mode = mode
+    }
+    return aes.Encrypt(string(plaintext), key, iv, actual_mode)
+}
+
+@aes_decrypt_text HEAD
+# aes_decrypt_text(ciphertext, key, iv, mode) 解密 AES CBC/CTR 密文并转为字符串。
+# mode 缺省或空字符串时使用 CBC；参数顺序与 aes.Decrypt 一致。 IV 必须为 16
+#   字节，CBC 密文须为 16 字节整数倍，否则底层分组操作可能触发运行时错误； CTR
+#   不填充。CBC
+#   无认证，不能可靠检测篡改；错误 key 或损坏数据可能产生无效明文。 具体处理遵从底层。
+@aes_decrypt_text END
+func aes_decrypt_text(ciphertext, key, iv, mode) {
+    let actual_mode = "CBC"
+    if mode != nil and mode != "" {
+        actual_mode = mode
+    }
+    return string(aes.Decrypt(ciphertext, key, iv, actual_mode))
+}
+
+@aes_encrypt_json HEAD
+# aes_encrypt_json(object, key, iv, mode) 先 JSON 序列化，再调用 aes_encrypt_text 加密，
+# 返回 bytes 密文。 key、IV、模式限制及 CBC/CTR 无认证等安全边界同
+#   aes_encrypt_text；JSON 序列化错误会抛出。
+@aes_encrypt_json END
+func aes_encrypt_json(object, key, iv, mode) {
+    return aes_encrypt_text(json.stringify(object), key, iv, mode)
+}
+
+@aes_decrypt_json HEAD
+# aes_decrypt_json(ciphertext, key, iv, mode) 解密为文本后解析 JSON，返回解码后的
+#   YScript 值。
+# key、IV、模式限制同 aes_decrypt_text；密文解密或明文不是合法 JSON 时会报错。
+@aes_decrypt_json END
+func aes_decrypt_json(ciphertext, key, iv, mode) {
+    let plaintext = aes_decrypt_text(ciphertext, key, iv, mode)
+    return json.parse(plaintext)
+}

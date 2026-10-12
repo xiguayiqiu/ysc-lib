@@ -1,0 +1,178 @@
+package io_utils
+import ["io", "string"]
+
+@read_text HEAD
+# read_text reads a file through io.read_file.
+# path is passed unchanged to the standard library and must name a readable file. Returns the file
+#   contents as text; filesystem, permission, and sandbox errors are propagated by io.read_file.
+@read_text END
+func read_text(path) {
+    return io.read_file(path)
+}
+
+@read_bytes HEAD
+# read_bytes reads a file through io.read_bytes.
+# path is passed unchanged and must name a readable file. Returns the file contents as bytes; read and
+#   permission errors are propagated.
+@read_bytes END
+func read_bytes(path) {
+    return io.read_bytes(path)
+}
+
+@read_lines HEAD
+# read_lines reads a file through io.read_lines.
+# path is passed unchanged and must name a readable file. Returns the standard library's line list without
+#   newline terminators. A line exceeding its scanner limit (16 MiB) and file/read errors are propagated.
+@read_lines END
+func read_lines(path) {
+    return io.read_lines(path)
+}
+
+@write_text HEAD
+# write_text replaces or creates a file with content.
+# path is the destination and content is converted by io.write_file according to its text argument
+#   handling. Returns nil on success; write errors are propagated.
+@write_text END
+func write_text(path, content) {
+    io.write_file(path, content)
+}
+
+@write_bytes HEAD
+# write_bytes replaces or creates a file with byte content.
+# path is the destination; content may be bytes or another value converted to text by io.write_bytes.
+#   Returns nil on success; write, permission, and sandbox errors propagate.
+@write_bytes END
+func write_bytes(path, content) {
+    io.write_bytes(path, content)
+}
+
+@append_text HEAD
+# append_text appends content to a file, creating it if the standard library does so.
+# path is the destination and content is passed to io.append_file unchanged. Returns nil on success;
+#   append and permission errors are propagated.
+@append_text END
+func append_text(path, content) {
+    io.append_file(path, content)
+}
+
+@io_append_lines HEAD
+# append_lines converts each item to text and appends the joined lines.
+# path is the destination; lines is an iterable collection whose items are converted with string(). Each
+#   non-empty list ends with one newline; an empty list appends an empty string. Existing content is preserved as
+#   the file prefix. Returns nil on success; conversion and file errors propagate.
+@io_append_lines END
+func io_append_lines(path, lines) {
+    let content = []
+    for line in lines {
+        content.append(string(line))
+    }
+    let text = strings.Join(content, "\n")
+    if len(content) > 0 {
+        text = text + "\n"
+    }
+    return io.append_file(path, text)
+}
+
+@write_lines HEAD
+# write_lines replaces a file with newline-delimited text.
+# path is the destination; lines is an iterable collection and every element is converted using string().
+#   Non-empty input receives a trailing newline; empty input writes an empty file. Returns nil on success and
+#   propagates errors.
+@write_lines END
+func write_lines(path, lines) {
+    let content = []
+    for line in lines {
+        content.append(string(line))
+    }
+    let text = strings.Join(content, "\n")
+    if len(content) > 0 {
+        text = text + "\n"
+    }
+    io.write_file(path, text)
+}
+
+@copy_file HEAD
+# copy_file copies a file from source to destination.
+# Both arguments are paths; destination behavior (including overwrite handling) is determined by io.copy.
+#   Returns the standard library result or propagates filesystem, permission, and sandbox errors.
+@copy_file END
+func copy_file(source, destination) {
+    return io.copy(source, destination)
+}
+
+@open_reader HEAD
+# open_reader opens path for reading using io.open_file mode "r".
+# Returns the standard-library stream handle; open failures are propagated.
+@open_reader END
+func open_reader(path) {
+    return io.open_file(path, "r")
+}
+
+@open_writer HEAD
+# open_writer opens path for writing using io.open_file mode "w".
+# The mode's creation/truncation behavior is that of io.open_file; returns its stream handle or propagates
+#   open and permission errors.
+@open_writer END
+func open_writer(path) {
+    return io.open_file(path, "w")
+}
+
+@open_appender HEAD
+# open_appender opens path for appending using io.open_file mode "a".
+# Returns the standard-library stream handle; open failures are propagated.
+@open_appender END
+func open_appender(path) {
+    return io.open_file(path, "a")
+}
+
+@copy_stream HEAD
+# copy_stream copies from an io source stream to a destination stream.
+# Arguments are open stream handles passed in destination, source order, matching io.Copy. Returns the
+#   copied byte count or propagates invalid-handle and stream errors.
+@copy_stream END
+func copy_stream(destination, source) {
+    return io.Copy(destination, source)
+}
+
+@file_exists HEAD
+# file_exists reports whether io.file_exists considers path to exist.
+# path is passed unchanged. Returns a boolean; this predicate follows the standard function's
+#   error-to-false behavior rather than exposing stat errors.
+@file_exists END
+func file_exists(path) {
+    return io.file_exists(path)
+}
+
+@file_size HEAD
+# file_size returns the size in bytes reported by io.file_size.
+# path must identify an existing filesystem entry. Returns an integer size; missing paths and stat errors
+#   are propagated.
+@file_size END
+func file_size(path) {
+    return io.file_size(path)
+}
+
+@ensure_dir HEAD
+# ensure_dir creates path and any missing parent directories.
+# path is passed unchanged to io.mkdir_all. Returns nil on success; existing directories are accepted by
+#   the underlying operation, while other filesystem and permission errors are propagated.
+@ensure_dir END
+func ensure_dir(path) {
+    return io.mkdir_all(path)
+}
+
+@io_utils_read_text_or HEAD
+# 尝试读取 path 指定的文本文件；读取成功返回文件内容，读取错误返回 fallback。
+# fallback 原样返回；文件、权限及沙箱错误均会被该显式 fallback 包装吞并。
+@io_utils_read_text_or END
+func io_utils_read_text_or(path, fallback) {
+    return io.read_file(path) catch fallback
+}
+
+@io_utils_transform_text HEAD
+# 读取 path 的文本内容并将其传给 transform(content)，返回回调结果。
+# transform 必须接受一个字符串参数；文件读取和回调错误均传播，不会自动写回文件。
+@io_utils_transform_text END
+func io_utils_transform_text(path, transform) {
+    return transform(io.read_file(path))
+}

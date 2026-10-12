@@ -1,0 +1,82 @@
+package from_utils
+import ["from"]
+
+@from_format_one HEAD
+# 按 Go 风格格式串 template 格式化单个 value，返回字符串。
+# value 是唯一格式化操作数；格式占位符不匹配时遵循原生 from.Sprintf
+#   的诊断行为。
+@from_format_one END
+func from_format_one(template, value) {
+    return from.Sprintf(template, value)
+}
+
+@format_one HEAD
+# 为兼容既有导入保留的无前缀别名：按 template 格式化单个 value
+#   并返回字符串。
+# 格式占位符与参数不匹配时遵循原生 from.Sprintf 的处理方式。
+@format_one END
+func format_one(template, value) {
+    return from_format_one(template, value)
+}
+
+@from_scan_int HEAD
+# 使用 %d 将 text 扫描为十进制整数，返回 from.Sscanf 的结果。
+# 输入不匹配或无法转换时由原生扫描器报错；返回值形状遵循 from.Sscanf。
+@from_scan_int END
+func from_scan_int(text) {
+    return from.Sscanf(string(text), "%d")
+}
+
+@scan_int HEAD
+# 为兼容既有导入保留的无前缀别名：使用 %d 扫描十进制整数。
+# 错误及返回值形状与 from_scan_int 相同。
+@scan_int END
+func scan_int(text) {
+    return from_scan_int(text)
+}
+
+@from_scan_float HEAD
+# 使用 %f 将 text 扫描为浮点数，返回 from.Sscanf 的结果。
+# 无效输入的错误处理及返回值形状遵循原生扫描器。
+@from_scan_float END
+func from_scan_float(text) {
+    return from.Sscanf(string(text), "%f")
+}
+
+@scan_float HEAD
+# 为兼容既有导入保留的无前缀别名：使用 %f 扫描浮点数。
+# 错误及返回值形状与 from_scan_float 相同。
+@scan_float END
+func scan_float(text) {
+    return from_scan_float(text)
+}
+
+@from_scan_fields HEAD
+# 按 format_string 中的格式指令扫描 text，并返回 from.Sscanf 的结果。
+# 可读取的字段由格式串决定；格式不匹配、输入错误及支持范围遵循原生扫描
+#   器。
+@from_scan_fields END
+func from_scan_fields(text, format_string) {
+    return from.Sscanf(string(text), format_string)
+}
+
+@scan_fields HEAD
+# 为兼容既有导入保留的无前缀别名：按 format_string 扫描 text。
+# 参数、返回值及错误行为与 from_scan_fields 相同。
+@scan_fields END
+func scan_fields(text, format_string) {
+    return from_scan_fields(text, format_string)
+}
+
+@from_format_each HEAD
+# 对 values 中每个值分别使用仅含一个操作数的 template
+#   格式化，按原顺序返回字符串列表。
+# 每项均单独调用原生 from.Sprintf；格式串及占位符处理遵循原生实现。
+@from_format_each END
+func from_format_each(template, values) {
+    let result = []
+    for value in values {
+        result.append(from.Sprintf(template, value))
+    }
+    return result
+}

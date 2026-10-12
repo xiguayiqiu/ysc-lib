@@ -1,0 +1,43 @@
+package toml_utils
+import ["toml"]
+
+@toml_parse_text HEAD
+# 将 TOML 文本解析为字典并返回。
+# TOML 语法错误由原生 toml.parse 抛出；原生解析要求文档根为映射结构。
+@toml_parse_text END
+func toml_parse_text(text) {
+    return toml.parse(string(text))
+}
+
+@toml_parse_file HEAD
+# 读取 path 指定的 TOML 文件并解析为字典返回。
+# 文件访问或 TOML 解码错误由原生 toml.from_file 抛出。
+@toml_parse_file END
+func toml_parse_file(path) {
+    return toml.from_file(path)
+}
+
+@toml_parse_or HEAD
+# 解析 TOML 文本；解析抛错时返回 fallback。
+# 有效的空文档返回空字典而非 fallback；语法及根结构要求遵循原生解析器。
+@toml_parse_or END
+func toml_parse_or(text, fallback) {
+    return toml.parse(string(text)) catch fallback
+}
+
+@toml_get_or HEAD
+# 解析 TOML 文本并返回根字典中 key 对应的直接值；解析失败、键缺失或值为
+#   nil 时返回 fallback。
+# 不解析点分嵌套路径；输入及键访问规则遵循原生字典语义。
+@toml_get_or END
+func toml_get_or(text, key, fallback) {
+    let document = toml.parse(string(text)) catch nil
+    if document == nil {
+        return fallback
+    }
+    let value = document[string(key)]
+    if value == nil {
+        return fallback
+    }
+    return value
+}

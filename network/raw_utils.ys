@@ -1,0 +1,60 @@
+package raw_utils
+import ["raw"]
+
+@read_capture HEAD
+# read_capture(path) 读取 pcap 文件并返回 raw.PcapReadFile 的包记录列表。
+# 需要本地文件读取权限；路径、文件格式或读取失败会由底层报错。
+@read_capture END
+func read_capture(path) {
+    return raw.PcapReadFile(path)
+}
+
+@write_capture HEAD
+# write_capture(path, packets) 将数据包列表写为 pcap 文件；返回底层写入结果。
+# 需要本地文件写入权限；路径须可写，数据格式须符合 raw.PcapWriteFile，
+#   错误由底层报告。
+@write_capture END
+func write_capture(path, packets) {
+    return raw.PcapWriteFile(path, packets)
+}
+
+@parse_ethernet_frame HEAD
+# parse_ethernet_frame(frame) 解析 Ethernet frame bytes，返回底层字段字典。
+# 不访问网络；输入过短或帧格式不受支持时遵从 raw.ParseEthernet
+#   的错误/结果语义。
+@parse_ethernet_frame END
+func parse_ethernet_frame(frame) {
+    return raw.ParseEthernet(frame)
+}
+
+@parse_ipv4_packet HEAD
+# parse_ipv4_packet(packet) 解析 IPv4 packet bytes 并返回头部字段字典。
+# 不访问网络；输入长度或 IPv4 头格式无效时遵从 raw.ParseIPv4 的错误/结果语义。
+@parse_ipv4_packet END
+func parse_ipv4_packet(packet) {
+    return raw.ParseIPv4(packet)
+}
+
+@parse_tcp_packet HEAD
+# parse_tcp_packet(packet) 解析 TCP segment bytes 并返回头部字段字典。
+# 不访问网络；输入长度或 TCP 头格式无效时遵从 raw.ParseTCP 的错误/结果语义。
+@parse_tcp_packet END
+func parse_tcp_packet(packet) {
+    return raw.ParseTCP(packet)
+}
+
+@parse_udp_packet HEAD
+# parse_udp_packet(packet) 解析 UDP datagram bytes 并返回头部字段字典。
+# 不访问网络；输入长度或 UDP 头格式无效时遵从 raw.ParseUDP 的错误/结果语义。
+@parse_udp_packet END
+func parse_udp_packet(packet) {
+    return raw.ParseUDP(packet)
+}
+
+@raw_parse_dns_packet HEAD
+# raw_parse_dns_packet(packet) 解析 DNS 报文 bytes 并返回 raw.ParseDNS 的记录结构。
+# 不访问网络；报文截断、字段无效或格式不受支持时错误由底层解析器返回。
+@raw_parse_dns_packet END
+func raw_parse_dns_packet(packet) {
+    return raw.ParseDNS(packet)
+}

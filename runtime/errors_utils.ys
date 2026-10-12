@@ -1,0 +1,99 @@
+package errors_utils
+import ["errors"]
+
+@wrap_if HEAD
+# 使用 errors.wrap 为非 nil 错误添加 context；error 为 nil 时返回 nil。
+# 原生 errors.wrap 会修改错误消息；非错误值以及上下文拼接行为遵循原生实现。
+@wrap_if END
+func wrap_if(error, context) {
+    if error == nil {
+        return nil
+    }
+    return errors.wrap(error, string(context))
+}
+
+@is_type HEAD
+# 使用 errors.is 检查 error 并返回布尔值；error 为 nil 时返回 false。
+# 原生操作检查目标文本是否包含于错误消息，并非按错误类型匹配。
+@is_type END
+func is_type(error, error_type) {
+    if error == nil {
+        return false
+    }
+    return errors.is(error, error_type)
+}
+
+@message HEAD
+# 返回 errors.format 的格式化结果；error 为 nil 时返回空字符串。
+# 非错误值的转换遵循原生 errors.format。
+@message END
+func message(error) {
+    if error == nil {
+        return ""
+    }
+    return errors.format(error)
+}
+
+@cause_or_self HEAD
+# 若 errors.cause(error) 与原值不同，则返回该 cause；否则返回原值。
+# 最多只取一层 cause；nil 输入保持为 nil，错误链行为由原生 errors.cause 决定。
+@cause_or_self END
+func cause_or_self(error) {
+    if error == nil {
+        return nil
+    }
+    let cause = errors.cause(error)
+    if cause == nil or cause == error {
+        return error
+    }
+    return cause
+}
+
+@errors_wrap_if HEAD
+# wrap_if 的模块前缀别名；只对非 nil 输入调用 errors.wrap。
+# 参数、返回值和错误消息修改行为与 wrap_if 相同。
+@errors_wrap_if END
+func errors_wrap_if(error, context) {
+    return wrap_if(error, context)
+}
+
+@errors_is_type HEAD
+# is_type 的模块前缀别名。注意名称虽含 type，原生 errors.is
+#   实际进行错误消息子串匹配。
+# 参数、返回值和 nil 处理与 is_type 相同。
+@errors_is_type END
+func errors_is_type(error, error_type) {
+    return is_type(error, error_type)
+}
+
+@errors_message HEAD
+# message 的模块前缀别名；nil 输入返回空字符串。
+# 格式化规则与 message 相同。
+@errors_message END
+func errors_message(error) {
+    return message(error)
+}
+
+@errors_cause_or_self HEAD
+# cause_or_self 的模块前缀别名；最多提取一层 cause。
+# 输入和返回规则与 cause_or_self 相同。
+@errors_cause_or_self END
+func errors_cause_or_self(error) {
+    return cause_or_self(error)
+}
+
+@errors_new_message HEAD
+# 使用 errors.new 创建错误值；message 会先转换为字符串并作为错误消息。
+# 原生构造函数的默认错误语义及返回类型保持不变。
+@errors_new_message END
+func errors_new_message(message) {
+    return errors.new(string(message))
+}
+
+@errors_with_type HEAD
+# 以 error_type 指定的字符串类型调用 errors.with_type，并返回结果。
+# 非错误输入由原生函数原样返回；对错误值的类型字段修改遵循原生实现。
+@errors_with_type END
+func errors_with_type(error, error_type) {
+    return errors.with_type(string(error_type), error)
+}

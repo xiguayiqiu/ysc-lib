@@ -1,0 +1,90 @@
+package cuda_utils
+import ["cuda", "crypto", "string"]
+
+@gpu_available HEAD
+# gpu_available() 返回运行时是否检测到可用 CUDA GPU。
+# 非 CUDA 构建的 stub 返回 false；CUDA 驱动查询失败可能抛错。
+@gpu_available END
+func gpu_available() {
+    return cuda.available()
+}
+
+@hash_batch HEAD
+# hash_batch(algorithm, values) 为历史兼容入口，只分派 sha256/md5 批量哈希。
+# 不支持的 algorithm 会明确报错；参数、结果和设备错误遵从对应 cuda API。 需
+#   CUDA 构建、GPU、驱动及可用内存；stub 构建会在底层报不支持。
+@hash_batch END
+func hash_batch(algorithm, values) {
+    if algorithm == "sha256" {
+        return cuda.SHA256_Batch(values)
+    }
+    if algorithm == "md5" {
+        return cuda.MD5_Batch(values)
+    }
+    assert(false, "unsupported CUDA hash algorithm: " + string(algorithm))
+    return nil
+}
+
+@cuda_hash_batch HEAD
+# cuda_hash_batch(algorithm, values) 按名称分派标准库支持的 CUDA 批量计算函数。
+# algorithm 支持 md4、md5、sha256、sha512、sha256d、ntlm； values
+#   必须是字符串列表，直接传给对应底层批量哈希 API。 不支持的算法会明确报错；
+#   参数与返回结构由对应 cuda API 决定。 需要以 CUDA build 编译，且有可用 GPU/驱动； 非 CUDA 构建会由 stub 返回“不支持”错误；算法参数错误或 GPU 调用失败会抛错。
+@cuda_hash_batch END
+func cuda_hash_batch(algorithm, values) {
+    if algorithm == "md4" {
+        return cuda.MD4_Batch(values)
+    }
+    if algorithm == "md5" {
+        return cuda.MD5_Batch(values)
+    }
+    if algorithm == "sha256" {
+        return cuda.SHA256_Batch(values)
+    }
+    if algorithm == "sha512" {
+        return cuda.SHA512_Batch(values)
+    }
+    if algorithm == "sha256d" {
+        return cuda.SHA256d_Batch(values)
+    }
+    if algorithm == "ntlm" {
+        return cuda.NTLM_Batch(values)
+    }
+    assert(false, "unsupported CUDA hash algorithm: " + string(algorithm))
+    return nil
+}
+
+@cuda_utils_hash_one HEAD
+# 对单个 value 执行指定 CUDA 哈希，并返回十六进制摘要。
+# algorithm 和 GPU/驱动要求与 cuda_hash_batch 相同；单值结果取批处理结果的首项。
+# 底层 CUDA 不可用、算法不支持或输入错误时按批处理 API 抛错。
+@cuda_utils_hash_one END
+func cuda_utils_hash_one(algorithm, value) {
+    let results = cuda_hash_batch(algorithm, [value])
+    return results[0]
+}
+
+@cuda_utils_hash_batch_auto HEAD
+# 对 values 批量计算哈希；CUDA 可用时调用 GPU，不可用时对 CPU 支持的算法逐项计算。
+# CPU 后备仅支持 md5、sha256、sha512；输入及结果按对应原生哈希函数的字符串/十六进制规则处理。
+# GPU 分支错误不静默回退；无 GPU 且算法不在 CPU 后备范围时明确报错。
+@cuda_utils_hash_batch_auto END
+func cuda_utils_hash_batch_auto(algorithm, values) {
+    if cuda.available() {
+        return cuda_hash_batch(algorithm, values)
+    }
+    let name = strings.ToLower(string(algorithm))
+    let out = []
+    for value in values {
+        if name == "md5" {
+            out.append(crypto.MD5(value))
+        } else if name == "sha256" {
+            out.append(crypto.SHA256(value))
+        } else if name == "sha512" {
+            out.append(crypto.SHA512(value))
+        } else {
+            assert(false, "CPU hash fallback does not support: " + name)
+        }
+    }
+    return out
+}

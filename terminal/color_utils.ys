@@ -1,0 +1,36 @@
+package color_utils
+import ["color"]
+
+@success HEAD
+# success(text) 将 text 转为字符串并应用 color.Green，返回着色后的字符串。
+# 只生成文本，不直接输出；终端是否显示颜色取决于消费者是否解释 ANSI
+#   序列。
+@success END
+func success(text) {
+    return color.Green(string(text))
+}
+
+@warning HEAD
+# warning(text) 将 text 转为字符串并应用 color.Yellow，返回着色后的字符串。
+# 只生成文本，不直接输出；终端颜色支持由调用方环境决定。
+@warning END
+func warning(text) {
+    return color.Yellow(string(text))
+}
+
+@error HEAD
+# error(text) 将 text 转为字符串并应用 color.Red，返回着色后的字符串。
+# 只生成文本，不写 stderr；终端颜色支持由调用方环境决定。
+@error END
+func error(text) {
+    return color.Red(string(text))
+}
+
+@heading HEAD
+# heading(text) 组合 color.Bold 与 color.Cyan，返回加粗青色字符串。
+# 只生成文本，不直接输出；ANSI
+#   样式在不支持控制序列的终端可能显示为原始转义码。
+@heading END
+func heading(text) {
+    return color.Bold(color.Cyan(string(text)))
+}

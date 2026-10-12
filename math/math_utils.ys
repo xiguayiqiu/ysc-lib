@@ -1,0 +1,1076 @@
+package math_utils
+import ["rand"]
+
+@math_utils_pi HEAD
+# math_utils_pi returns pi as a double-precision decimal approximation.
+@math_utils_pi END
+func math_utils_pi() {
+    return 3.141592653589793
+}
+
+@math_utils_PI HEAD
+# math_utils_PI returns the Math.PI-compatible constant; YScript modules expose it as a function.
+@math_utils_PI END
+func math_utils_PI() {
+    return math_utils_pi()
+}
+
+@math_utils_e HEAD
+# math_utils_e returns Euler's number as a double-precision decimal approximation.
+@math_utils_e END
+func math_utils_e() {
+    return 2.718281828459045
+}
+
+@math_utils_E HEAD
+# math_utils_E returns the Math.E-compatible constant; YScript modules expose it as a function.
+@math_utils_E END
+func math_utils_E() {
+    return math_utils_e()
+}
+
+@math_utils_abs HEAD
+# math_utils_abs returns the absolute value of a number.
+# The input must be a numeric value accepted by YScript's comparison and negation operators.
+@math_utils_abs END
+func math_utils_abs(value) {
+    if value < 0 {
+        return 0 - value
+    }
+    return value
+}
+
+@math_utils_sign HEAD
+# math_utils_sign returns -1, 0, or 1 according to the sign of value.
+@math_utils_sign END
+func math_utils_sign(value) {
+    if value < 0 {
+        return -1
+    }
+    if value > 0 {
+        return 1
+    }
+    return 0
+}
+
+@math_utils_min HEAD
+# math_utils_min returns the smaller of two comparable numeric values.
+@math_utils_min END
+func math_utils_min(left, right) {
+    if left != left {
+        return left
+    }
+    if right != right {
+        return right
+    }
+    if left < right {
+        return left
+    }
+    return right
+}
+
+@math_utils_max HEAD
+# math_utils_max returns the larger of two comparable numeric values.
+@math_utils_max END
+func math_utils_max(left, right) {
+    if left != left {
+        return left
+    }
+    if right != right {
+        return right
+    }
+    if left > right {
+        return left
+    }
+    return right
+}
+
+@math_utils_clamp HEAD
+# math_utils_clamp bounds value to the inclusive interval [lower, upper].
+# lower must not exceed upper; invalid bounds fail the assertion.
+@math_utils_clamp END
+func math_utils_clamp(value, lower, upper) {
+    assert(lower <= upper, "lower bound must not exceed upper bound")
+    if value < lower {
+        return lower
+    }
+    if value > upper {
+        return upper
+    }
+    return value
+}
+
+@math_utils_lerp HEAD
+# math_utils_lerp linearly interpolates from start to finish using t.
+# t is not restricted to [0, 1], so extrapolation is supported.
+@math_utils_lerp END
+func math_utils_lerp(start, finish, t) {
+    return start + (finish - start) * t
+}
+
+@math_utils_map_range HEAD
+# math_utils_map_range maps value from one interval into another.
+# A zero-width input interval is invalid and fails the assertion; output values are not clamped.
+@math_utils_map_range END
+func math_utils_map_range(value, input_start, input_end, output_start, output_end) {
+    assert(input_start != input_end, "input range must not be zero")
+    let input_value = double(value)
+    let source_start = double(input_start)
+    let source_end = double(input_end)
+    let target_start = double(output_start)
+    let target_end = double(output_end)
+    return target_start + (input_value - source_start) * (target_end - target_start) / (source_end - source_start)
+}
+
+@math_utils_floor HEAD
+# math_utils_floor returns the greatest integer less than or equal to value.
+# Values outside signed 64-bit range and NaN are returned unchanged.
+@math_utils_floor END
+func math_utils_floor(value) {
+    let number = double(value)
+    if number != number or number >= 9223372036854775808.0 or number <= -9223372036854775808.0 {
+        return number
+    }
+    let truncated = int(number)
+    if number < truncated {
+        return truncated - 1
+    }
+    return truncated
+}
+
+@math_utils_ceil HEAD
+# math_utils_ceil returns the least integer greater than or equal to value.
+# Values outside signed 64-bit range and NaN are returned unchanged.
+@math_utils_ceil END
+func math_utils_ceil(value) {
+    let number = double(value)
+    if number != number or number >= 9223372036854775808.0 or number <= -9223372036854775808.0 {
+        return number
+    }
+    let truncated = int(number)
+    if number > truncated {
+        return truncated + 1
+    }
+    return truncated
+}
+
+@math_utils_round HEAD
+# math_utils_round rounds to the nearest integer, with exact half values away from zero.
+# Values outside signed 64-bit range and NaN are returned unchanged.
+@math_utils_round END
+func math_utils_round(value) {
+    let number = double(value)
+    if number != number or number >= 9223372036854775808.0 or number <= -9223372036854775808.0 {
+        return number
+    }
+    if number < 0 {
+        return int(number - 0.5)
+    }
+    return int(number + 0.5)
+}
+
+@math_utils_rint HEAD
+# math_utils_rint rounds to the nearest integer, with ties rounded to the even integer.
+# Values outside the signed 64-bit integer interval are returned unchanged.
+@math_utils_rint END
+func math_utils_rint(value) {
+    let number = double(value)
+    if number != number {
+        return number
+    }
+    if number >= 9223372036854775808.0 or number <= -9223372036854775808.0 {
+        return number
+    }
+    let lower = math_utils_floor(number)
+    let fraction = number - double(lower)
+    if fraction < 0.5 {
+        return double(lower)
+    }
+    if fraction > 0.5 {
+        return double(lower + 1)
+    }
+    if lower % 2 == 0 {
+        return double(lower)
+    }
+    return double(lower + 1)
+}
+
+@math_utils_sqrt HEAD
+# math_utils_sqrt returns the non-negative square root using Newton iteration.
+# Negative inputs fail the assertion; zero returns zero. The result is a double-precision approximation.
+@math_utils_sqrt END
+func math_utils_sqrt(value) {
+    let number = double(value)
+    if number != number {
+        return number
+    }
+    if number > 1.7976931348623157e308 {
+        return number
+    }
+    assert(number >= 0.0, "square root input must be non-negative")
+    if number == 0.0 {
+        return 0.0
+    }
+    let guess = number
+    if number < 1 {
+        guess = 1.0
+    }
+    let iteration = 0
+    while iteration < 2048 {
+        let next = (guess + number / guess) / 2.0
+        if next == guess {
+            return next
+        }
+        guess = next
+        iteration = iteration + 1
+    }
+    return guess
+}
+
+@math_utils_pow HEAD
+# math_utils_pow raises base to a real exponent.
+# Negative bases require integer exponents; zero with a negative exponent fails the assertion. Integer
+#   exponents use exponentiation by squaring, and other positive-base cases use exp(y*log(x)).
+@math_utils_pow END
+func math_utils_pow(base, exponent) {
+    let x = double(base)
+    let y = double(exponent)
+    if x != x or y != y {
+        return math_utils_nan()
+    }
+    if x == 0.0 {
+        assert(y >= 0.0, "zero cannot have a negative exponent")
+        if y == 0.0 {
+            return 1.0
+        }
+        return 0.0
+    }
+    if x < 0.0 {
+        let power = int(y)
+        assert(double(power) == y, "negative base requires an integer exponent")
+        return math_utils_pow_integer(x, power)
+    }
+    if y >= -9223372036854775808.0 and y < 9223372036854775808.0 {
+        let power = int(y)
+        if double(power) == y {
+            return math_utils_pow_integer(x, power)
+        }
+    }
+    return math_utils_exp(y * math_utils_log(x))
+}
+
+@math_utils_pow_integer HEAD
+# math_utils_pow_integer evaluates a signed 64-bit integer power with exponentiation by squaring.
+# The minimum signed exponent is rejected because its positive magnitude cannot be represented.
+@math_utils_pow_integer END
+func math_utils_pow_integer(base, power) {
+    let negative = power < 0
+    assert(not (double(base) == 0.0 and negative), "zero cannot have a negative exponent")
+    assert(power != -9223372036854775807 - 1, "exponent is out of supported range")
+    let remaining = power
+    if negative {
+        remaining = 0 - power
+    }
+    let factor = double(base)
+    if negative {
+        factor = 1.0 / factor
+    }
+    let result = 1.0
+    while remaining > 0 {
+        if remaining % 2 == 1 {
+            result = result * factor
+        }
+        factor = factor * factor
+        remaining = remaining / 2
+    }
+    return result
+}
+
+@math_utils_gcd HEAD
+# math_utils_gcd returns the greatest common divisor of two integers, normalized to non-negative.
+# Both arguments must be integers; the result is zero when both arguments are zero.
+@math_utils_gcd END
+func math_utils_gcd(left, right) {
+    let a = int(left)
+    let b = int(right)
+    assert(double(a) == double(left) and double(b) == double(right), "gcd arguments must be integers")
+    a = math_utils_abs(a)
+    b = math_utils_abs(b)
+    while b != 0 {
+        let remainder = a % b
+        a = b
+        b = remainder
+    }
+    return a
+}
+
+@math_utils_lcm HEAD
+# math_utils_lcm returns the least common multiple of two integers, normalized to non-negative.
+# If either input is zero, the result is zero; integer overflow follows YScript's integer arithmetic rules.
+@math_utils_lcm END
+func math_utils_lcm(left, right) {
+    let divisor = math_utils_gcd(left, right)
+    if left == 0 or right == 0 {
+        return 0
+    }
+    return math_utils_abs((int(left) / divisor) * int(right))
+}
+
+@math_utils_factorial HEAD
+# math_utils_factorial returns n! as an integer.
+# n must be an integer from 0 through 20; out-of-range and non-integer inputs fail the assertion.
+@math_utils_factorial END
+func math_utils_factorial(n) {
+    let value = int(n)
+    assert(double(value) == double(n) and value >= 0 and value <= 20, "factorial input must be an integer from 0 through 20")
+    let result = 1
+    let i = 2
+    while i <= value {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+@math_utils_is_prime HEAD
+# math_utils_is_prime reports whether n is a prime integer.
+# Values below 2 and non-integers return false; trial division stops once divisor exceeds n / divisor.
+@math_utils_is_prime END
+func math_utils_is_prime(n) {
+    if n < 2 or double(int(n)) != double(n) {
+        return false
+    }
+    let value = int(n)
+    let divisor = 2
+    while divisor <= value / divisor {
+        if value % divisor == 0 {
+            return false
+        }
+        divisor = divisor + 1
+    }
+    return true
+}
+
+@math_utils_mean HEAD
+# math_utils_mean returns the arithmetic mean of a non-empty collection of numeric values.
+# An empty collection fails the assertion; the result is a double-precision value.
+@math_utils_mean END
+func math_utils_mean(values) {
+    assert(len(values) > 0, "mean requires at least one value")
+    let total = 0.0
+    for value in values {
+        total = total + double(value)
+    }
+    return total / double(len(values))
+}
+
+@math_utils_variance HEAD
+# math_utils_variance returns the population variance of a non-empty collection of numeric values.
+# It divides by the number of values (not n - 1); an empty collection fails the mean assertion.
+@math_utils_variance END
+func math_utils_variance(values) {
+    let average = math_utils_mean(values)
+    let total = 0.0
+    for value in values {
+        let difference = double(value) - average
+        total = total + difference * difference
+    }
+    return total / double(len(values))
+}
+
+@math_utils_degrees_to_radians HEAD
+# math_utils_degrees_to_radians converts degrees to radians.
+@math_utils_degrees_to_radians END
+func math_utils_degrees_to_radians(degrees) {
+    return double(degrees) * math_utils_pi() / 180.0
+}
+
+@math_utils_radians_to_degrees HEAD
+# math_utils_radians_to_degrees converts radians to degrees.
+@math_utils_radians_to_degrees END
+func math_utils_radians_to_degrees(radians) {
+    return double(radians) * 180.0 / math_utils_pi()
+}
+
+@math_utils_to_radians HEAD
+# math_utils_to_radians is the Java Math.toRadians-compatible alias.
+@math_utils_to_radians END
+func math_utils_to_radians(degrees) {
+    return math_utils_degrees_to_radians(degrees)
+}
+
+@math_utils_to_degrees HEAD
+# math_utils_to_degrees is the Java Math.toDegrees-compatible alias.
+@math_utils_to_degrees END
+func math_utils_to_degrees(radians) {
+    return math_utils_radians_to_degrees(radians)
+}
+
+@math_utils_reduce_radians HEAD
+# math_utils_reduce_radians normalizes a radian angle into [-pi, pi].
+# Angles whose turn count cannot be converted to int() are rejected by that conversion.
+@math_utils_reduce_radians END
+func math_utils_reduce_radians(radians) {
+    let period = 2.0 * math_utils_pi()
+    let angle = double(radians)
+    if angle != angle or math_utils_abs(angle) > 1.7976931348623157e308 {
+        return math_utils_nan()
+    }
+    let turns = int(angle / period)
+    angle = angle - double(turns) * period
+    if angle > math_utils_pi() {
+        angle = angle - period
+    }
+    if angle < 0.0 - math_utils_pi() {
+        angle = angle + period
+    }
+    return angle
+}
+
+@math_utils_sin HEAD
+# math_utils_sin approximates the sine of an angle in radians with a Taylor series.
+# Range reduction is used first; angles with an unrepresentable integer turn count fail conversion.
+@math_utils_sin END
+func math_utils_sin(radians) {
+    let angle = math_utils_reduce_radians(radians)
+    let square = angle * angle
+    let term = angle
+    let total = angle
+    let index = 1
+    while index <= 12 {
+        let first = double(2 * index)
+        term = 0.0 - term * square / (first * (first + 1.0))
+        total = total + term
+        index = index + 1
+    }
+    return total
+}
+
+@math_utils_cos HEAD
+# math_utils_cos approximates the cosine of an angle in radians with a Taylor series.
+# Range reduction is used first; angles with an unrepresentable integer turn count fail conversion.
+@math_utils_cos END
+func math_utils_cos(radians) {
+    let angle = math_utils_reduce_radians(radians)
+    let square = angle * angle
+    let term = 1.0
+    let total = 1.0
+    let index = 1
+    while index <= 12 {
+        let second = double(2 * index)
+        term = 0.0 - term * square / ((second - 1.0) * second)
+        total = total + term
+        index = index + 1
+    }
+    return total
+}
+
+@math_utils_tan HEAD
+# math_utils_tan returns sine divided by cosine for an angle in radians.
+# Angles whose cosine is within 1e-15 of zero fail the assertion rather than returning an unstable result.
+@math_utils_tan END
+func math_utils_tan(radians) {
+    let cosine = math_utils_cos(radians)
+    if cosine != cosine {
+        return cosine
+    }
+    assert(math_utils_abs(cosine) >= 1e-15, "tangent is undefined near odd multiples of pi/2")
+    return math_utils_sin(radians) / cosine
+}
+
+@math_utils_random HEAD
+# math_utils_random returns a pseudo-random double in [0.0, 1.0).
+# It delegates to rand.float and is not suitable for cryptographic use.
+@math_utils_random END
+func math_utils_random() {
+    return rand.float(0.0, 1.0)
+}
+
+@math_utils_exp HEAD
+# math_utils_exp approximates e raised to x using range reduction and a Taylor series.
+# Overflow and underflow follow YScript floating-point arithmetic.
+@math_utils_exp END
+func math_utils_exp(value) {
+    let x = double(value)
+    if x != x {
+        return x
+    }
+    if x > 709.782712893384 {
+        return math_utils_infinity()
+    }
+    if x < -745.1332191019411 {
+        return 0.0
+    }
+    let scale = int(x / 0.6931471805599453)
+    let remainder = x - double(scale) * 0.6931471805599453
+    if remainder > 0.34657359027997265 {
+        remainder = remainder - 0.6931471805599453
+        scale = scale + 1
+    }
+    if remainder < 0.0 - 0.34657359027997265 {
+        remainder = remainder + 0.6931471805599453
+        scale = scale - 1
+    }
+    let term = 1.0
+    let total = 1.0
+    let index = 1
+    while index <= 32 {
+        term = term * remainder / double(index)
+        total = total + term
+        index = index + 1
+    }
+    return math_utils_scalb(total, scale)
+}
+
+@math_utils_expm1 HEAD
+# math_utils_expm1 approximates exp(x) - 1 while retaining precision near zero.
+@math_utils_expm1 END
+func math_utils_expm1(value) {
+    let x = double(value)
+    if math_utils_abs(x) >= 0.01 {
+        return math_utils_exp(x) - 1.0
+    }
+    let term = x
+    let total = x
+    let index = 2
+    while index <= 40 {
+        term = term * x / double(index)
+        total = total + term
+        index = index + 1
+    }
+    return total
+}
+
+@math_utils_log HEAD
+# math_utils_log approximates the natural logarithm for positive values.
+# Non-positive values fail an assertion; positive infinity is returned unchanged.
+@math_utils_log END
+func math_utils_log(value) {
+    let x = double(value)
+    if x != x {
+        return x
+    }
+    if x > 1.7976931348623157e308 {
+        return x
+    }
+    assert(x > 0.0, "log input must be positive")
+    let exponent = 0
+    while x >= 2.0 {
+        x = x / 2.0
+        exponent = exponent + 1
+    }
+    while x < 1.0 {
+        x = x * 2.0
+        exponent = exponent - 1
+    }
+    let ratio = (x - 1.0) / (x + 1.0)
+    let square = ratio * ratio
+    let term = ratio
+    let total = ratio
+    let denominator = 3
+    let iteration = 1
+    while iteration < 160 {
+        term = term * square
+        total = total + term / double(denominator)
+        denominator = denominator + 2
+        iteration = iteration + 1
+    }
+    return 2.0 * total + double(exponent) * 0.6931471805599453
+}
+
+@math_utils_log10 HEAD
+# math_utils_log10 returns the base-10 logarithm of a positive value.
+@math_utils_log10 END
+func math_utils_log10(value) {
+    return math_utils_log(value) / 2.302585092994046
+}
+
+@math_utils_log1p HEAD
+# math_utils_log1p approximates log(1+x), using a series near zero for improved precision.
+# x must be greater than -1.
+@math_utils_log1p END
+func math_utils_log1p(value) {
+    let x = double(value)
+    assert(x > -1.0, "log1p input must be greater than -1")
+    if math_utils_abs(x) >= 0.01 {
+        return math_utils_log(1.0 + x)
+    }
+    let term = x
+    let total = x
+    let denominator = 2
+    let iteration = 1
+    while iteration <= 80 {
+        term = term * (0.0 - x)
+        total = total + term / double(denominator)
+        denominator = denominator + 1
+        iteration = iteration + 1
+    }
+    return total
+}
+
+@math_utils_cbrt HEAD
+# math_utils_cbrt approximates the real cube root with Newton iteration.
+# Negative inputs are supported and retain their sign.
+@math_utils_cbrt END
+func math_utils_cbrt(value) {
+    let x = double(value)
+    if x != x {
+        return x
+    }
+    if math_utils_abs(x) > 1.7976931348623157e308 {
+        return x
+    }
+    if x == 0.0 {
+        return x
+    }
+    let negative = x < 0.0
+    if negative {
+        x = 0.0 - x
+    }
+    let guess = x
+    if x < 1.0 {
+        guess = 1.0
+    }
+    let iteration = 0
+    while iteration < 1200 {
+        let square = guess * guess
+        let next = (2.0 * guess + x / square) / 3.0
+        if next == guess {
+            if negative {
+                return 0.0 - next
+            }
+            return next
+        }
+        guess = next
+        iteration = iteration + 1
+    }
+    if negative {
+        return 0.0 - guess
+    }
+    return guess
+}
+
+@math_utils_hypot HEAD
+# math_utils_hypot returns sqrt(x*x+y*y) using scaling to reduce avoidable overflow/underflow.
+@math_utils_hypot END
+func math_utils_hypot(x, y) {
+    let a = math_utils_abs(double(x))
+    let b = math_utils_abs(double(y))
+    if a > 1.7976931348623157e308 or b > 1.7976931348623157e308 {
+        return math_utils_infinity()
+    }
+    if a != a or b != b {
+        return math_utils_nan()
+    }
+    let larger = math_utils_max(a, b)
+    if larger == 0.0 {
+        return 0.0
+    }
+    let smaller = math_utils_min(a, b) / larger
+    return larger * math_utils_sqrt(1.0 + smaller * smaller)
+}
+
+@math_utils_asin HEAD
+# math_utils_asin returns the inverse sine in radians for values in [-1, 1].
+@math_utils_asin END
+func math_utils_asin(value) {
+    let x = double(value)
+    assert(x >= -1.0 and x <= 1.0, "asin input must be in [-1, 1]")
+    return math_utils_atan2(x, math_utils_sqrt((1.0 - x) * (1.0 + x)))
+}
+
+@math_utils_acos HEAD
+# math_utils_acos returns the inverse cosine in radians for values in [-1, 1].
+@math_utils_acos END
+func math_utils_acos(value) {
+    let x = double(value)
+    assert(x >= -1.0 and x <= 1.0, "acos input must be in [-1, 1]")
+    return math_utils_atan2(math_utils_sqrt((1.0 - x) * (1.0 + x)), x)
+}
+
+@math_utils_atan HEAD
+# math_utils_atan approximates the inverse tangent in radians.
+@math_utils_atan END
+func math_utils_atan(value) {
+    let x = double(value)
+    if x < 0.0 {
+        return 0.0 - math_utils_atan(0.0 - x)
+    }
+    if x > 1.0 {
+        return math_utils_pi() / 2.0 - math_utils_atan(1.0 / x)
+    }
+    if x > 0.41421356237309503 {
+        return math_utils_pi() / 4.0 + math_utils_atan((x - 1.0) / (x + 1.0))
+    }
+    let square = x * x
+    let term = x
+    let total = x
+    let denominator = 3
+    let iteration = 1
+    while iteration <= 80 {
+        term = term * (0.0 - square)
+        total = total + term / double(denominator)
+        denominator = denominator + 2
+        iteration = iteration + 1
+    }
+    return total
+}
+
+@math_utils_atan2 HEAD
+# math_utils_atan2 returns the quadrant-aware angle of (y, x) in radians.
+# The origin is defined as zero; signed-zero distinctions are not representable by this pure-YScript implementation.
+@math_utils_atan2 END
+func math_utils_atan2(y, x) {
+    let vertical = double(y)
+    let horizontal = double(x)
+    if horizontal > 0.0 {
+        return math_utils_atan(vertical / horizontal)
+    }
+    if horizontal < 0.0 and vertical >= 0.0 {
+        return math_utils_atan(vertical / horizontal) + math_utils_pi()
+    }
+    if horizontal < 0.0 and vertical < 0.0 {
+        return math_utils_atan(vertical / horizontal) - math_utils_pi()
+    }
+    if vertical > 0.0 {
+        return math_utils_pi() / 2.0
+    }
+    if vertical < 0.0 {
+        return 0.0 - math_utils_pi() / 2.0
+    }
+    return 0.0
+}
+
+@math_utils_sinh HEAD
+# math_utils_sinh returns the hyperbolic sine using exp(x) and exp(-x).
+@math_utils_sinh END
+func math_utils_sinh(value) {
+    let x = double(value)
+    return (math_utils_exp(x) - math_utils_exp(0.0 - x)) / 2.0
+}
+
+@math_utils_cosh HEAD
+# math_utils_cosh returns the hyperbolic cosine using exp(x) and exp(-x).
+@math_utils_cosh END
+func math_utils_cosh(value) {
+    let x = double(value)
+    return (math_utils_exp(x) + math_utils_exp(0.0 - x)) / 2.0
+}
+
+@math_utils_tanh HEAD
+# math_utils_tanh returns the hyperbolic tangent, saturating to +/-1 for large magnitudes.
+@math_utils_tanh END
+func math_utils_tanh(value) {
+    let x = double(value)
+    if x > 20.0 {
+        return 1.0
+    }
+    if x < -20.0 {
+        return -1.0
+    }
+    let doubled = math_utils_exp(2.0 * math_utils_abs(x))
+    let result = (doubled - 1.0) / (doubled + 1.0)
+    if x < 0.0 {
+        return 0.0 - result
+    }
+    return result
+}
+
+@math_utils_add_exact HEAD
+# math_utils_add_exact adds two signed 64-bit integers or fails on overflow.
+@math_utils_add_exact END
+func math_utils_add_exact(left, right) {
+    let a = int(left)
+    let b = int(right)
+    assert(double(a) == double(left) and double(b) == double(right), "addExact requires integer inputs")
+    let maximum = 9223372036854775807
+    let minimum = 0 - maximum - 1
+    assert(not (b > 0 and a > maximum - b), "signed 64-bit addition overflow")
+    assert(not (b < 0 and a < minimum - b), "signed 64-bit addition overflow")
+    return a + b
+}
+
+@math_utils_subtract_exact HEAD
+# math_utils_subtract_exact subtracts two signed 64-bit integers or fails on overflow.
+@math_utils_subtract_exact END
+func math_utils_subtract_exact(left, right) {
+    let a = int(left)
+    let b = int(right)
+    assert(double(a) == double(left) and double(b) == double(right), "subtractExact requires integer inputs")
+    let maximum = 9223372036854775807
+    let minimum = 0 - maximum - 1
+    assert(not (b < 0 and a > maximum + b), "signed 64-bit subtraction overflow")
+    assert(not (b > 0 and a < minimum + b), "signed 64-bit subtraction overflow")
+    return a - b
+}
+
+@math_utils_multiply_exact HEAD
+# math_utils_multiply_exact multiplies two signed 64-bit integers or fails on overflow.
+@math_utils_multiply_exact END
+func math_utils_multiply_exact(left, right) {
+    let a = int(left)
+    let b = int(right)
+    assert(double(a) == double(left) and double(b) == double(right), "multiplyExact requires integer inputs")
+    let maximum = 9223372036854775807
+    let minimum = 0 - maximum - 1
+    if a > 0 {
+        assert(not (b > 0 and a > maximum / b), "signed 64-bit multiplication overflow")
+        assert(not (b < 0 and b < minimum / a), "signed 64-bit multiplication overflow")
+    }
+    if a < 0 {
+        assert(not (b > 0 and a < minimum / b), "signed 64-bit multiplication overflow")
+        assert(not (b < 0 and a < maximum / b), "signed 64-bit multiplication overflow")
+    }
+    return a * b
+}
+
+@math_utils_to_int_exact HEAD
+# math_utils_to_int_exact converts an integer to signed 32-bit range or fails if out of range.
+# This matches Java Math.toIntExact(long), despite YScript's native int being signed 64-bit.
+@math_utils_to_int_exact END
+func math_utils_to_int_exact(value) {
+    let number = int(value)
+    assert(double(number) == double(value), "toIntExact requires an integer input")
+    assert(number >= -2147483648 and number <= 2147483647, "value does not fit in signed 32-bit integer")
+    return number
+}
+
+@math_utils_signum HEAD
+# math_utils_signum returns -1, 0, or 1 according to the sign of a finite value.
+# This language-level implementation does not preserve the sign bit of negative zero.
+@math_utils_signum END
+func math_utils_signum(value) {
+    let number = double(value)
+    if number != number {
+        return number
+    }
+    return math_utils_sign(number)
+}
+
+@math_utils_infinity HEAD
+# math_utils_infinity returns positive IEEE-754 infinity.
+@math_utils_infinity END
+func math_utils_infinity() {
+    return 1e308 * 1e308
+}
+
+@math_utils_nan HEAD
+# math_utils_nan returns an IEEE-754 NaN generated from infinity minus infinity.
+@math_utils_nan END
+func math_utils_nan() {
+    let infinity = math_utils_infinity()
+    return infinity - infinity
+}
+
+@math_utils_get_exponent HEAD
+# math_utils_get_exponent returns floor(log2(abs(value))) for normal values, -1023 for subnormals and zero,
+#   and 1024 for infinity or NaN.
+@math_utils_get_exponent END
+func math_utils_get_exponent(value) {
+    let x = math_utils_abs(double(value))
+    if x != x or x > 1.7976931348623157e308 {
+        return 1024
+    }
+    if x == 0.0 or x < 2.2250738585072014e-308 {
+        return -1023
+    }
+    let exponent = 0
+    while x >= 2.0 {
+        x = x / 2.0
+        exponent = exponent + 1
+    }
+    while x < 1.0 {
+        x = x * 2.0
+        exponent = exponent - 1
+    }
+    return exponent
+}
+
+@math_utils_scalb HEAD
+# math_utils_scalb multiplies value by 2 raised to integer exponent.
+# Extreme exponents are bounded to avoid unbounded loops; IEEE overflow and underflow are preserved.
+@math_utils_scalb END
+func math_utils_scalb(value, exponent) {
+    let result = double(value)
+    if result == 0.0 or result != result or math_utils_abs(result) > 1.7976931348623157e308 {
+        return result
+    }
+    if exponent > 2200 {
+        return result * math_utils_infinity()
+    }
+    if exponent < -2200 {
+        return result * 0.0
+    }
+    let power = int(exponent)
+    assert(double(power) == double(exponent), "scalb exponent must be an integer")
+    let remaining = power
+    while remaining > 0 {
+        result = result * 2.0
+        remaining = remaining - 1
+    }
+    while remaining < 0 {
+        result = result / 2.0
+        remaining = remaining + 1
+    }
+    return result
+}
+
+@math_utils_ulp HEAD
+# math_utils_ulp returns the spacing to the next representable binary64 value at the given magnitude.
+# For zero and subnormals it returns the minimum subnormal approximation 4.9406564584124654e-324.
+@math_utils_ulp END
+func math_utils_ulp(value) {
+    let x = math_utils_abs(double(value))
+    if x != x or x > 1.7976931348623157e308 {
+        return x
+    }
+    if x < 2.2250738585072014e-308 {
+        return math_utils_scalb(1.0, -1074)
+    }
+    return math_utils_scalb(1.0, math_utils_get_exponent(x) - 52)
+}
+
+@math_utils_next_up HEAD
+# math_utils_next_up approximates the next binary64 value toward positive infinity.
+# It uses binary64 spacing arithmetic and cannot preserve NaN payloads or signed zero.
+@math_utils_next_up END
+func math_utils_next_up(value) {
+    let x = double(value)
+    if x != x or x > 1.7976931348623157e308 {
+        return x
+    }
+    if x < -1.7976931348623157e308 {
+        return 0.0 - 1.7976931348623157e308
+    }
+    if x == 0.0 {
+        return math_utils_scalb(1.0, -1074)
+    }
+    if x > 0.0 {
+        return x + math_utils_ulp(x)
+    }
+    return x + math_utils_next_down_step(0.0 - x)
+}
+
+@math_utils_next_down HEAD
+# math_utils_next_down approximates the next binary64 value toward negative infinity.
+# It uses binary64 spacing arithmetic and cannot preserve NaN payloads or signed zero.
+@math_utils_next_down END
+func math_utils_next_down(value) {
+    let x = double(value)
+    if x != x or x < -1.7976931348623157e308 {
+        return x
+    }
+    if x > 1.7976931348623157e308 {
+        return 1.7976931348623157e308
+    }
+    if x == 0.0 {
+        return 0.0 - math_utils_scalb(1.0, -1074)
+    }
+    if x < 0.0 {
+        return x - math_utils_ulp(0.0 - x)
+    }
+    return x - math_utils_next_down_step(x)
+}
+
+@math_utils_next_down_step HEAD
+# math_utils_next_down_step returns the spacing toward smaller magnitude at a positive value.
+@math_utils_next_down_step END
+func math_utils_next_down_step(value) {
+    let x = double(value)
+    let exponent = math_utils_get_exponent(x)
+    let spacing = math_utils_ulp(x)
+    if exponent > -1022 and x == math_utils_scalb(1.0, exponent) {
+        return spacing / 2.0
+    }
+    return spacing
+}
+
+@math_utils_next_after HEAD
+# math_utils_next_after moves value one representable step toward direction.
+# Equal values return direction; this arithmetic implementation approximates exceptional IEEE encodings.
+@math_utils_next_after END
+func math_utils_next_after(value, direction) {
+    let x = double(value)
+    let target = double(direction)
+    if x != x {
+        return x
+    }
+    if target != target {
+        return target
+    }
+    if x == target {
+        return target
+    }
+    if x < target {
+        return math_utils_next_up(x)
+    }
+    return math_utils_next_down(x)
+}
+
+@math_utils_copy_sign HEAD
+# math_utils_copy_sign applies the sign of sign_source to the magnitude of magnitude.
+# Negative zero sign bits cannot be represented or preserved by this pure-YScript helper.
+@math_utils_copy_sign END
+func math_utils_copy_sign(magnitude, sign_source) {
+    let absolute = math_utils_abs(double(magnitude))
+    if sign_source < 0.0 {
+        return 0.0 - absolute
+    }
+    return absolute
+}
+
+@math_utils_ieee_remainder HEAD
+# math_utils_ieee_remainder computes x - n*y where n is the nearest-even integer to x/y.
+# A zero divisor or infinite dividend returns NaN; finite values and an infinite divisor are supported.
+@math_utils_ieee_remainder END
+func math_utils_ieee_remainder(x, y) {
+    let dividend = double(x)
+    let divisor = double(y)
+    if dividend != dividend or divisor != divisor {
+        return math_utils_nan()
+    }
+    if math_utils_abs(dividend) > 1.7976931348623157e308 or divisor == 0.0 {
+        return math_utils_nan()
+    }
+    if math_utils_abs(divisor) > 1.7976931348623157e308 {
+        return dividend
+    }
+    let magnitude = math_utils_abs(dividend)
+    let modulus = math_utils_abs(divisor)
+    if magnitude == 0.0 {
+        return dividend
+    }
+    let remainder = magnitude
+    if modulus > 8.988465674311579e307 {
+        let ratio = magnitude / modulus
+        if ratio <= 0.5 {
+            return dividend
+        }
+        if ratio < 1.5 {
+            remainder = magnitude - modulus
+        } else {
+            remainder = (magnitude - modulus) - modulus
+        }
+    } else {
+        let period = modulus * 2.0
+        let scaled = period
+        while scaled <= remainder / 2.0 {
+            scaled = scaled * 2.0
+        }
+        while scaled >= period {
+            if remainder >= scaled {
+                remainder = remainder - scaled
+            }
+            scaled = scaled / 2.0
+        }
+        if remainder > modulus {
+            remainder = remainder - period
+        } else if remainder == modulus {
+            remainder = 0.0
+        }
+    }
+    if dividend < 0.0 {
+        return 0.0 - remainder
+    }
+    return remainder
+}

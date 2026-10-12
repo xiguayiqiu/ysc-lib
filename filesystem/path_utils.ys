@@ -1,0 +1,72 @@
+package path_utils
+import ["path", "string"]
+
+@join HEAD
+# join joins path fragments from left to right using path.join.
+# parts is an iterable collection of path-like values converted with string(). An empty collection returns
+#   ""; absolute fragments and separators follow the platform-specific standard path.join behavior.
+@join END
+func join(parts) {
+    let result = ""
+    for part in parts {
+        if result == "" {
+            result = string(part)
+        } else {
+            result = path.join(result, string(part))
+        }
+    }
+    return result
+}
+
+@has_extension HEAD
+# has_extension compares path.ext(file_path) with extension exactly.
+# file_path is a path; extension should include its leading dot when applicable (for example ".ys").
+#   Returns false for a case mismatch or differing spelling.
+@has_extension END
+func has_extension(file_path, extension) {
+    return path.ext(file_path) == string(extension)
+}
+
+@ensure_extension HEAD
+# ensure_extension returns file_path unchanged when its extension matches,
+# otherwise appending extension verbatim. extension is not normalized or replaced: callers should include
+#   a leading dot if desired. Comparison follows path.ext's platform-specific semantics.
+@ensure_extension END
+func ensure_extension(file_path, extension) {
+    if path.ext(file_path) == string(extension) {
+        return file_path
+    }
+    return string(file_path) + string(extension)
+}
+
+@is_within HEAD
+# is_within reports whether candidate is root or appears below root after
+# converting both paths to absolute, cleaned paths. Comparison uses a separator-terminated textual prefix
+#   ("/" is used as the separator); it does not resolve symlinks and may not model every platform's case or volume
+#   rules. Path conversion errors from path.abs are propagated.
+@is_within END
+func is_within(root, candidate) {
+    let base = path.to_unix(path.clean(path.abs(root)))
+    let target = path.to_unix(path.clean(path.abs(candidate)))
+    if base == target {
+        return true
+    }
+    let prefix = base
+    if not strings.HasSuffix(prefix, "/") {
+        prefix = prefix + "/"
+    }
+    return strings.HasPrefix(target, prefix)
+}
+
+@path_utils_resolve HEAD
+# 将 parts 中的路径片段从 root 起依次连接、清理并转为绝对路径。
+# parts 必须可迭代；片段拼接遵循 path.join 的平台规则，绝对片段可影响最终路径；
+# path.abs 错误向调用方传播。
+@path_utils_resolve END
+func path_utils_resolve(root, parts) {
+    let result = string(root)
+    for part in parts {
+        result = path.join(result, string(part))
+    }
+    return path.clean(path.abs(result))
+}

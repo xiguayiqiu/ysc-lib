@@ -1,0 +1,42 @@
+package xml_utils
+import ["xml"]
+
+@xml_parse_text HEAD
+# 将 XML 文本解析为原生简化树结构并返回根节点字典。
+# 节点包含 _tag；可选 _attrs 字典、去除首尾空白的 _text 字符串及 _children
+#   子节点列表。 XML
+#   格式错误由原生解析器抛出；此表示不保证保留命名空间前缀或完整混合文本顺序。
+@xml_parse_text END
+func xml_parse_text(text) {
+    return xml.Parse(string(text))
+}
+
+@xml_parse_file HEAD
+# 读取 path 指定的文件并解析 XML，返回结构与 xml.Parse 相同的根节点字典。
+# 文件读取错误及 XML 解码错误由原生 xml.ParseFile 抛出。
+@xml_parse_file END
+func xml_parse_file(path) {
+    return xml.ParseFile(path)
+}
+
+@xml_root_tag_or HEAD
+# 读取 tree 的 _tag 成员并返回；tree 为 nil 或该成员为 nil 时返回 fallback。
+# 不递归验证节点结构，也不保证存在的 _tag 必为字符串。
+@xml_root_tag_or END
+func xml_root_tag_or(tree, fallback) {
+    if tree == nil or tree["_tag"] == nil {
+        return fallback
+    }
+    return tree["_tag"]
+}
+
+@xml_children_or_empty HEAD
+# 返回 node 的 _children 成员；节点为 nil 或无该成员时返回空列表。
+# 仅返回直接子节点，不递归搜索后代；已有成员的类型不另行校验。
+@xml_children_or_empty END
+func xml_children_or_empty(node) {
+    if node == nil or node["_children"] == nil {
+        return []
+    }
+    return node["_children"]
+}

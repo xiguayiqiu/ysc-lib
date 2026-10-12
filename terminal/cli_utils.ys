@@ -1,0 +1,54 @@
+package cli_utils
+import ["cli", "stdio", "os", "string"]
+
+@has_flag HEAD
+# has_flag(arguments, flag) 检查参数列表中是否存在与 flag 完全相同的项。
+# 返回布尔值；不做短选项合并、等号形式解析或大小写归一化。
+@has_flag END
+func has_flag(arguments, flag) {
+    for argument in arguments {
+        if argument == flag {
+            return true
+        }
+    }
+    return false
+}
+
+@option_value HEAD
+# option_value(arguments, option, fallback) 返回 option 后的参数，或匹配 option=value
+#   的内联值；
+# 都未找到时返回 fallback。不会消费/校验选项值；arguments
+#   应是已经拆分的字符串列表。
+@option_value END
+func option_value(arguments, option, fallback) {
+    let i = 0
+    while i < len(arguments) {
+        if arguments[i] == option {
+            if i + 1 >= len(arguments) {
+                return fallback
+            }
+            return arguments[i + 1]
+        }
+        let inline = strings.SplitN(string(arguments[i]), "=", 2)
+        if strings.HasPrefix(string(arguments[i]), string(option) + "=") and len(inline) == 2 {
+            return inline[1]
+        }
+        i = i + 1
+    }
+    return fallback
+}
+
+@parse_or_exit HEAD
+# parse_or_exit(arguments, specification) 使用 cli.parse 解析参数并返回解析结果。
+# 解析返回 null 时向 stderr 输出固定错误提示并以状态码 2 退出； 非法
+#   specification 或底层解析异常仍会抛出。 该包装会终止当前进程，适用于 CLI
+#   入口而非可复用库函数。
+@parse_or_exit END
+func parse_or_exit(arguments, specification) {
+    let result = cli.parse(arguments, specification)
+    if result == nil {
+        stdio.err_println("命令行参数解析失败")
+        os.exit(2)
+    }
+    return result
+}

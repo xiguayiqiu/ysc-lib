@@ -1,0 +1,82 @@
+package http_utils
+import ["http", "json"]
+
+@get_json HEAD
+# get_json(url) 发起 GET 并将响应 body 解析为 JSON。
+# 成功返回 {response: 原始响应字典, data: 解析后的值}；请求无响应时返回 null。
+#   网络受策略限制、请求或 JSON 解析失败时保留底层错误； HTTP 非 2xx
+#   不会自动视为解析失败。
+@get_json END
+func get_json(url) {
+    let response = http.Get(url)
+    if response == nil {
+        return nil
+    }
+    return {
+        "response": response,
+        "data": json.parse(response.body),
+    }
+}
+
+@post_json HEAD
+# post_json(url, object) 将 object 序列化为 JSON 并 POST，设置 JSON Content-Type 与 Accept
+#   头。
+# 返回 http.Post 的响应字典或 null；需要网络权限。
+#   序列化、URL、策略或传输错误遵从底层 API； HTTP
+#   状态码需由调用方检查，不会自动抛错。
+@post_json END
+func post_json(url, object) {
+    return http.Post(url, json.stringify(object), {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    })
+}
+
+@require_ok HEAD
+# require_ok(response) 判断响应字典是否存在且其 ok 字段为真；返回布尔值。
+# null 响应返回 false；非响应值或缺失/无效 ok 字段按 YScript 字段访问语义报错。
+@require_ok END
+func require_ok(response) {
+    if response == nil {
+        return false
+    }
+    return response.ok
+}
+
+@header HEAD
+# header(response, name, fallback) 读取指定名称的响应头，大小写匹配规则由
+#   http.Headers 决定。
+# 字段不存在返回 fallback；存在时返回底层值。 response 必须是兼容 http.Headers
+#   的响应对象。
+@header END
+func header(response, name, fallback) {
+    let value = http.Headers(response, name)
+    if value == nil {
+        return fallback
+    }
+    return value
+}
+
+@http_utils_request HEAD
+# 使用 http.Request 按 options 字典发起可配置 HTTP 请求并返回原生响应对象。
+# options 至少需要 url；可选 method、body、headers、query、json、form、timeout、
+# retries、cookies、auth 和其他底层支持项；策略或请求错误遵循原生 API。
+@http_utils_request END
+func http_utils_request(options) {
+    return http.Request(options)
+}
+
+@http_utils_request_json HEAD
+# 使用 http.Request 发起 options 指定的请求，并将响应 body 解析为 JSON。
+# 成功返回 {response, data}；无响应返回 nil；JSON 解码错误传播。HTTP 状态码由调用方检查。
+@http_utils_request_json END
+func http_utils_request_json(options) {
+    let response = http.Request(options)
+    if response == nil {
+        return nil
+    }
+    return {
+        "response": response,
+        "data": json.parse(response.body),
+    }
+}

@@ -1,0 +1,51 @@
+package stdio_utils
+import ["stdio", "string"]
+
+@read_non_empty HEAD
+# read_non_empty repeatedly prompts until the trimmed response is non-empty.
+# prompt is passed to stdio.input; surrounding Unicode whitespace is removed. Returns the trimmed text. An
+#   input error or EOF is propagated by stdio.input.
+@read_non_empty END
+func read_non_empty(prompt) {
+    while true {
+        let value = strings.TrimSpace(stdio.input(prompt))
+        if value != "" {
+            return value
+        }
+        stdio.err_println("输入不能为空")
+    }
+}
+
+@read_int_range HEAD
+# read_int_range repeatedly reads an integer within the inclusive bounds.
+# prompt is shown for every attempt; minimum and maximum are inclusive. Invalid text is treated as minimum
+#   - 1, and out-of-range input causes another prompt. minimum > maximum can therefore never succeed; input errors
+#   propagate.
+@read_int_range END
+func read_int_range(prompt, minimum, maximum) {
+    while true {
+        let raw = strings.TrimSpace(stdio.input(prompt))
+        let value = int(raw) catch minimum - 1
+        if value >= minimum and value <= maximum {
+            return value
+        }
+        stdio.err_println("请输入 " + string(minimum) + " 到 " + string(maximum) + " 之间的整数")
+    }
+}
+
+@print_table HEAD
+# print_table prints tab-separated headers followed by tab-separated rows.
+# headers is passed to strings.Join; rows is an iterable collection of iterable rows, with each cell
+#   converted using string(). Unequal row widths are allowed. Writes to standard output and returns nil after all
+#   output calls complete.
+@print_table END
+func print_table(headers, rows) {
+    stdio.println(strings.Join(headers, "\t"))
+    for row in rows {
+        let cells = []
+        for cell in row {
+            cells.append(string(cell))
+        }
+        stdio.println(strings.Join(cells, "\t"))
+    }
+}

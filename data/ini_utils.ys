@@ -1,0 +1,43 @@
+package ini_utils
+import ["ini"]
+
+@ini_parse_text HEAD
+# 将 INI 文本解析为字典并返回：全局键位于顶层，除 DEFAULT
+#   外的节表示为嵌套字典，值为字符串。
+# 语法错误由原生 ini.parse 抛出；默认节和键值展开细节遵循原生 ini 库行为。
+@ini_parse_text END
+func ini_parse_text(text) {
+    return ini.parse(string(text))
+}
+
+@ini_parse_file HEAD
+# 读取 path 指定的 INI 文件并按 ini_parse_text 的结构返回字典。
+# 文件访问和解析错误由原生 ini.from_file 抛出。
+@ini_parse_file END
+func ini_parse_file(path) {
+    return ini.from_file(path)
+}
+
+@ini_parse_or HEAD
+# 解析 INI 文本；原生解析抛错时返回 fallback。
+# 成功时返回字典，顶层全局键及嵌套节的表示方式与 ini_parse_text 相同。
+@ini_parse_or END
+func ini_parse_or(text, fallback) {
+    return ini.parse(string(text)) catch fallback
+}
+
+@ini_global_or HEAD
+# 从已解析的 INI document 顶层读取 key；文档为 nil 或键缺失/值为 nil 时返回
+#   fallback。
+# 本函数只取全局键；读取节内键需先从 document 取得对应节字典。
+@ini_global_or END
+func ini_global_or(document, key, fallback) {
+    if document == nil {
+        return fallback
+    }
+    let value = document[string(key)]
+    if value == nil {
+        return fallback
+    }
+    return value
+}

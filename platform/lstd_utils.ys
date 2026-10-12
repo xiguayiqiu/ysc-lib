@@ -1,0 +1,30 @@
+package lstd_utils
+import ["lstd"]
+
+@lstd_load_library HEAD
+# lstd_load_library(path) 通过受限 lstd API 加载动态库并返回句柄。
+# path 必须匹配 YSCRIPT_LSTD_ALLOW 环境变量中的白名单；
+#   格式或授权不匹配、库不可加载、 平台不支持 FFI 时抛错。即使有库/符号白名单，
+#   错误 ABI 的原生调用仍可能导致进程崩溃。
+@lstd_load_library END
+func lstd_load_library(path) {
+    return lstd.load(path)
+}
+
+@lstd_find_symbol HEAD
+# lstd_find_symbol(library, name)
+#   在已授权的库中查找白名单允许的符号并返回句柄。
+# name 必须列在 YSCRIPT_LSTD_ALLOW 对该库的符号授权内；
+#   句柄无效、库关闭或符号未授权/不存在时报错。
+@lstd_find_symbol END
+func lstd_find_symbol(library, name) {
+    return lstd.find(library, name)
+}
+
+@lstd_close_library HEAD
+# lstd_close_library(library) 关闭 lstd_load_library 返回的库句柄。
+# 返回值与错误遵从 lstd.close；句柄关闭后不可再查找或调用该库的符号。
+@lstd_close_library END
+func lstd_close_library(library) {
+    return lstd.close(library)
+}

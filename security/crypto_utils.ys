@@ -1,0 +1,123 @@
+package crypto_utils
+import ["crypto", "string"]
+
+@sha256_hex HEAD
+# sha256_hex(data) 返回 crypto.SHA256 对 data 字符串表示计算的 64
+#   位小写十六进制摘要。
+# 此标准库接口按 String() 字节处理输入；不会将任意 bytes 强制当作二进制原文。
+@sha256_hex END
+func sha256_hex(data) {
+    return crypto.SHA256(data)
+}
+
+@sha256_file HEAD
+# sha256_file(path) 计算文件 SHA-256 并返回小写十六进制摘要。
+# 需要本地文件读取权限；路径不存在、不可读或文件读取失败时由 crypto.HashFile
+#   报错。
+@sha256_file END
+func sha256_file(path) {
+    return crypto.HashFile("sha256", path)
+}
+
+@hmac_sha256_hex HEAD
+# hmac_sha256_hex(key, data) 返回 HMAC-SHA-256 的小写十六进制字符串。
+# key 与 data 按标准库 String()
+#   转换为字节；缺少参数时抛错。此函数只计算，不做校验。
+@hmac_sha256_hex END
+func hmac_sha256_hex(key, data) {
+    return crypto.HMAC_SHA256(key, data)
+}
+
+@verify_sha256 HEAD
+# verify_sha256(data, expected) 将计算出的 SHA-256 十六进制摘要与 expected
+#   不区分大小写比较。
+# 返回布尔值；expected 应是摘要文本。
+#   比较不是恒定时间密码学比较，不要用来验证秘密 MAC。
+@verify_sha256 END
+func verify_sha256(data, expected) {
+    return strings.EqualFold(sha256_hex(data), string(expected))
+}
+
+@password_hash HEAD
+# password_hash(password) 使用 crypto.BcryptHash 生成 bcrypt 密码摘要并返回字符串。
+# 采用底层默认 cost；bcrypt 对输入长度有限制，超限或生成失败会报错；
+#   计算本身有意较耗时。
+@password_hash END
+func password_hash(password) {
+    return crypto.BcryptHash(password)
+}
+
+@verify_password HEAD
+# verify_password(password, hash) 校验明文口令与 bcrypt 摘要是否匹配，返回布尔值。
+# 错误/格式不合法的摘要通常返回 false；缺少参数等错误遵从 crypto.BcryptVerify。
+@verify_password END
+func verify_password(password, hash) {
+    return crypto.BcryptVerify(password, hash)
+}
+
+@crypto_utils_hash HEAD
+# 按名称分派内置摘要算法并返回十六进制摘要。
+# algorithm 支持 md5、sha1、sha224、sha256、sha384、sha512、sha3_224、
+# sha3_256、sha3_384、sha3_512、blake2s、blake2b；名称忽略大小写，
+# 连字符会规范为下划线。data 遵循对应原生函数的字符串转换规则；
+# 不支持的算法明确报错。MD5/SHA1 不适合安全敏感用途。
+@crypto_utils_hash END
+func crypto_utils_hash(algorithm, data) {
+    let name = strings.ToLower(strings.Replace(string(algorithm), "-", "_"))
+    if name == "md5" {
+        return crypto.MD5(data)
+    }
+    if name == "sha1" {
+        return crypto.SHA1(data)
+    }
+    if name == "sha224" {
+        return crypto.SHA224(data)
+    }
+    if name == "sha256" or name == "sha_256" {
+        return crypto.SHA256(data)
+    }
+    if name == "sha384" {
+        return crypto.SHA384(data)
+    }
+    if name == "sha512" or name == "sha_512" {
+        return crypto.SHA512(data)
+    }
+    if name == "sha3_224" {
+        return crypto.SHA3_224(data)
+    }
+    if name == "sha3_256" {
+        return crypto.SHA3_256(data)
+    }
+    if name == "sha3_384" {
+        return crypto.SHA3_384(data)
+    }
+    if name == "sha3_512" {
+        return crypto.SHA3_512(data)
+    }
+    if name == "blake2s" {
+        return crypto.BLAKE2s(data)
+    }
+    if name == "blake2b" {
+        return crypto.BLAKE2b(data)
+    }
+    assert(false, "unsupported hash algorithm: " + name)
+}
+
+@crypto_utils_hmac HEAD
+# 按名称分派 HMAC-SHA256、HMAC-SHA512 或 HMAC-SHA3，并返回十六进制 MAC。
+# algorithm 接受 sha256、sha512、sha3 或 sha3_256；key/data 的字符串转换遵循原生 API。
+# 需要认证时应使用 MAC 并以恒定时间方式验证；普通摘要不可替代 HMAC。
+@crypto_utils_hmac END
+func crypto_utils_hmac(algorithm, key, data) {
+    let name = strings.ToLower(strings.Replace(string(algorithm), "-", "_"))
+    if name == "sha256" or name == "sha_256" {
+        return crypto.HMAC_SHA256(key, data)
+    }
+    if name == "sha512" or name == "sha_512" {
+        return crypto.HMAC_SHA512(key, data)
+    }
+    if name == "sha3" or name == "sha3_256" {
+        return crypto.HMAC_SHA3_256(key, data)
+    }
+    assert(false, "unsupported HMAC algorithm: " + name)
+}

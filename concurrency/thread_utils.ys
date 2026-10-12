@@ -1,0 +1,20 @@
+package thread_utils
+import ["thread"]
+
+@current_thread HEAD
+# current_thread() 返回当前 YScript 执行线程 ID；若运行时未提供线程 ID
+#   回调则返回 0。
+# 此值是运行时标识，不是可移植的 OS 原生线程句柄；无副作用。
+@current_thread END
+func current_thread() {
+    return thread.self()
+}
+
+@parent_thread HEAD
+# parent_thread() 返回当前协程/执行线程的父线程 ID；
+# 无父线程或运行时未提供回调时返回 null。
+#   标识由运行时定义，不保证跨进程或运行时稳定。
+@parent_thread END
+func parent_thread() {
+    return thread.parent()
+}

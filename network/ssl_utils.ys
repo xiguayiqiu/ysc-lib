@@ -1,0 +1,37 @@
+package ssl_utils
+import ["ssl"]
+
+@parse_certificate HEAD
+# parse_certificate(pem_text) 将 DER bytes 或 PEM 字符串解析为单张证书信息字典。
+# 参数须含有效证书；格式错误、缺少证书或不支持的输入， 会由
+#   ssl.ParseCertificate 抛错。 纯解析操作，不建立网络连接。
+@parse_certificate END
+func parse_certificate(pem_text) {
+    return ssl.ParseCertificate(pem_text)
+}
+
+@parse_certificates HEAD
+# parse_certificates(pem_text) 从 PEM 字符串中提取可解析的 CERTIFICATE
+#   块，返回证书字典列表。
+# 没有有效证书块时可返回空列表；无法解析的块会被底层跳过。
+#   纯解析，不需网络权限。
+@parse_certificates END
+func parse_certificates(pem_text) {
+    return ssl.ParseCertificates(pem_text)
+}
+
+@server_certificate HEAD
+# server_certificate(address, server_name) 通过 TLS
+#   获取远端服务器证书链并返回底层证书结果。
+# address 必须是 host:port；server_name 可选，nil
+#   或空串时省略该实参、由标准库推导。
+#   需要网络权限；此底层接口显式跳过证书验证，仅适合检查/诊断，
+#   不能据此认定连接可信；
+#   DNS、连接、握手或读取证书失败时遵从底层错误。
+@server_certificate END
+func server_certificate(address, server_name) {
+    if server_name == nil or server_name == "" {
+        return ssl.GetServerCertificate(address)
+    }
+    return ssl.GetServerCertificate(address, server_name)
+}

@@ -1,0 +1,38 @@
+package ocr_utils
+import ["ocr"]
+
+@recognize_file HEAD
+# recognize_file(path, language) 从图像文件识别文本；
+# language 为空字符串时沿用 OCR 当前语言设置。 返回识别文本字符串；需要可用
+#   OCR/Tesseract 构建、相应语言数据及文件读取权限。
+#   文件读取、语言包缺失或图像解码/识别失败会抛错。
+#   函数临时改写全局语言并用 defer 恢复； 全局配置在并发调用间共享，临时设置不是事务锁定，调用间可能相互干扰。
+@recognize_file END
+func recognize_file(path, language) {
+    let previous = ocr.get_lang()
+    defer ocr.set_lang(previous)
+    if language != "" {
+        ocr.set_lang(language)
+    }
+    return ocr.from_file(path)
+}
+
+@recognize_with_mode HEAD
+# recognize_with_mode(path, language, mode)
+#   临时设置语言和页面分割模式后识别图像文件。
+# mode 为标准库允许的 PSM 整数 0–13；language
+#   为空时保留当前语言。返回识别文本字符串。 需要 OCR/Tesseract
+#   构建、对应语言数据及文件读取权限；参数、文件或识别错误会抛出。
+#   defer 会尝试恢复之前的语言和 PSM，但配置是进程级共享状态，并发调用可能彼此影响。
+@recognize_with_mode END
+func recognize_with_mode(path, language, mode) {
+    let previous_lang = ocr.get_lang()
+    let previous_mode = ocr.get_psm()
+    defer ocr.set_lang(previous_lang)
+    defer ocr.set_psm(previous_mode)
+    if language != "" {
+        ocr.set_lang(language)
+    }
+    ocr.set_psm(mode)
+    return ocr.from_file(path)
+}

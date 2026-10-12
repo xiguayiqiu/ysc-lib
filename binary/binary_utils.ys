@@ -1,0 +1,122 @@
+package binary_utils
+import ["binary"]
+
+@concat_all HEAD
+# 按顺序连接 parts 中的字节值并返回字节结果；空列表返回空字节值。
+# 每个元素传给原生 binary.Concat；不符合其输入要求时错误由原生函数抛出。
+@concat_all END
+func concat_all(parts) {
+    let result = b""
+    for part in parts {
+        result = binary.Concat(result, part)
+    }
+    return result
+}
+
+@read_u16 HEAD
+# 从 data 的 offset 字节位置读取 16 位无符号整数；little_endian
+#   为真时按小端，否则按大端。
+# 不足两个字节或切片结果长度不为 2 时返回 nil；offset 的越界裁剪遵循原生
+#   binary.Slice。
+@read_u16 END
+func read_u16(data, offset, little_endian) {
+    let part = binary.Slice(data, offset, offset + 2)
+    if len(part) != 2 {
+        return nil
+    }
+    if little_endian {
+        return int(part[0]) | (int(part[1]) << 8)
+    }
+    return (int(part[0]) << 8) | int(part[1])
+}
+
+@read_u32 HEAD
+# 从 data 的 offset 字节位置读取 32 位无符号整数；little_endian
+#   为真时按小端，否则按大端。
+# 不足四个字节或切片结果长度不为 4 时返回 nil；offset 的越界裁剪遵循原生
+#   binary.Slice。
+@read_u32 END
+func read_u32(data, offset, little_endian) {
+    let part = binary.Slice(data, offset, offset + 4)
+    if len(part) != 4 {
+        return nil
+    }
+    if little_endian {
+        return int(part[0]) | (int(part[1]) << 8) | (int(part[2]) << 16) | (int(part[3]) << 24)
+    }
+    return (int(part[0]) << 24) | (int(part[1]) << 16) | (int(part[2]) << 8) | int(part[3])
+}
+
+@equal_bytes HEAD
+# 比较 left 与 right 的字节内容是否完全相同，返回布尔值。
+# 长度不同或任一字节不同时返回 false；输入的字符串转字节等规则遵循原生
+#   binary.Compare。
+@equal_bytes END
+func equal_bytes(left, right) {
+    return binary.Compare(left, right) == 0
+}
+
+@binary_concat_all HEAD
+# concat_all 的模块前缀别名。按序连接字节列表；空列表返回空字节值。
+# 元素类型及错误行为与 concat_all 相同。
+@binary_concat_all END
+func binary_concat_all(parts) {
+    return concat_all(parts)
+}
+
+@binary_read_u16 HEAD
+# read_u16 的模块前缀别名。按指定端序读取 16 位值，不足两个字节时返回
+#   nil。
+# 参数和边界行为与 read_u16 相同。
+@binary_read_u16 END
+func binary_read_u16(data, offset, little_endian) {
+    return read_u16(data, offset, little_endian)
+}
+
+@binary_read_u32 HEAD
+# read_u32 的模块前缀别名。按指定端序读取 32 位值，不足四个字节时返回
+#   nil。
+# 参数和边界行为与 read_u32 相同。
+@binary_read_u32 END
+func binary_read_u32(data, offset, little_endian) {
+    return read_u32(data, offset, little_endian)
+}
+
+@binary_equal_bytes HEAD
+# equal_bytes 的模块前缀别名。字节长度和内容都相同时返回 true。
+# 输入转换及比较行为与 equal_bytes 相同。
+@binary_equal_bytes END
+func binary_equal_bytes(left, right) {
+    return equal_bytes(left, right)
+}
+
+@binary_chunks HEAD
+# 将 data 按 chunk_size 字节切分并返回字节块列表，末尾不足一块时保留短块。
+# chunk_size 小于或等于零时返回空列表；空数据也返回空列表。
+@binary_chunks END
+func binary_chunks(data, chunk_size) {
+    assert(chunk_size > 0, "chunk size must be positive")
+    let chunks = []
+    let offset = 0
+    while offset < len(data) {
+        let end = offset + chunk_size
+        if end > len(data) {
+            end = len(data)
+        }
+        chunks.append(binary.Slice(data, offset, end))
+        offset = end
+    }
+    return chunks
+}
+
+@binary_read_u8 HEAD
+# 读取 data 在 offset 处的一个字节并以整数返回，范围为 0 至 255。
+# 切片结果不恰为一个字节时返回 nil；偏移处理遵循原生 binary.Slice。
+@binary_read_u8 END
+func binary_read_u8(data, offset) {
+    let part = binary.Slice(data, offset, offset + 1)
+    if len(part) != 1 {
+        return nil
+    }
+    return int(part[0])
+}

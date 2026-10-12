@@ -1,0 +1,62 @@
+package url_utils
+import ["url"]
+
+@encode_query HEAD
+# 将 values 字典编码为查询字符串并返回。
+# 字典值由原生 url.Encode
+#   转为字符串；此封装每个键只提供一个值，不能表达重复键的多值列表。
+#   非字典输入会由原生函数报错；键排序及转义规则遵循原生实现。
+@encode_query END
+func encode_query(values) {
+    return url.Encode(values)
+}
+
+@decode_query HEAD
+# 将 query 解析为字典并返回；重复键对应的多个值由原生实现以逗号连接。
+# 无效百分号转义等解析错误由原生 url.Decode 抛出。
+@decode_query END
+func decode_query(query) {
+    return url.Decode(string(query))
+}
+
+@url_encode_query HEAD
+# encode_query 的模块前缀别名，返回编码后的查询字符串。
+# 字典值转换、键排序、转义及错误行为均与 encode_query 相同。
+@url_encode_query END
+func url_encode_query(values) {
+    return encode_query(values)
+}
+
+@url_decode_query HEAD
+# decode_query 的模块前缀别名，返回解析后的字典。
+# 重复键处理和查询格式错误行为均与 decode_query 相同。
+@url_decode_query END
+func url_decode_query(query) {
+    return decode_query(query)
+}
+
+@url_parse_or HEAD
+# 将 address 解析为原生 url.Parse 返回的字典；解析抛错时返回 fallback。
+# 成功字典含 scheme、host、port、path、query、fragment、userinfo；无端口时 port
+#   为字符串 "0"。 原生解析器对无效 URL 的判定和字段规范化规则保持不变。
+@url_parse_or END
+func url_parse_or(address, fallback) {
+    return url.Parse(string(address)) catch fallback
+}
+
+@url_query_value_or HEAD
+# 解析 query 并返回 key 对应的值；解析失败、键缺失或值为 nil 时返回
+#   fallback。
+# 重复键按原生 url.Decode 的逗号连接表示；若有效值恰好为 nil，也会视为缺失。
+@url_query_value_or END
+func url_query_value_or(query, key, fallback) {
+    let values = url.Decode(string(query)) catch nil
+    if values == nil {
+        return fallback
+    }
+    let value = values[string(key)]
+    if value == nil {
+        return fallback
+    }
+    return value
+}

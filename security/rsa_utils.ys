@@ -1,0 +1,52 @@
+package rsa_utils
+import ["rsa"]
+
+@rsa_generate_key_pair HEAD
+# rsa_generate_key_pair(bits) 生成 RSA 密钥对并返回含 public/private PEM 的字典。
+# bits 省略或超出底层范围时使用默认 2048 位；有效范围为 512 到 4096 位。
+#   使用系统密码学随机数源；失败会抛错。私钥应按敏感数据保管。
+@rsa_generate_key_pair END
+func rsa_generate_key_pair(bits) {
+    if bits == nil or bits < 512 or bits > 4096 {
+        return rsa.GenerateKeyPair()
+    }
+    return rsa.GenerateKeyPair(int(bits))
+}
+
+@rsa_sign_text HEAD
+# rsa_sign_text(text, private_key) 对文本按标准库固定的 SHA-256/RSA PKCS#1 v1.5
+#   方案签名。
+# 返回签名字节；private_key 必须是兼容的 PKCS#1 RSA 私钥
+#   PEM，密钥解析或签名失败会报错。
+@rsa_sign_text END
+func rsa_sign_text(text, private_key) {
+    return rsa.Sign(string(text), private_key)
+}
+
+@rsa_verify_text HEAD
+# rsa_verify_text(text, signature, public_key) 验证 SHA-256/RSA PKCS#1 v1.5
+#   签名，返回布尔值。
+# public_key 须为 PKIX RSA 公钥
+#   PEM；无效密钥/类型会报错，签名不匹配由标准库返回 false。
+@rsa_verify_text END
+func rsa_verify_text(text, signature, public_key) {
+    return rsa.Verify(string(text), signature, public_key)
+}
+
+@rsa_encrypt_text HEAD
+# rsa_encrypt_text(text, public_key) 用 RSA-OAEP/SHA-256 加密文本并返回 bytes 密文。
+# public_key 须为 PKIX RSA 公钥 PEM；单次明文长度受 RSA 模数和 OAEP 开销限制，
+#   超长或解析错误会报错。
+@rsa_encrypt_text END
+func rsa_encrypt_text(text, public_key) {
+    return rsa.Encrypt(string(text), public_key)
+}
+
+@rsa_decrypt_text HEAD
+# rsa_decrypt_text(ciphertext, private_key) 使用 RSA-OAEP/SHA-256 解密并转成字符串。
+# private_key 须为 PKCS#1 RSA 私钥
+#   PEM；密钥格式错误、密文不匹配或解密失败会报错。
+@rsa_decrypt_text END
+func rsa_decrypt_text(ciphertext, private_key) {
+    return string(rsa.Decrypt(ciphertext, private_key))
+}

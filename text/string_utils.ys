@@ -1,0 +1,112 @@
+package string_utils
+import ["string", "regex"]
+
+@reverse HEAD
+# reverse reverses text by Unicode code point rather than UTF-8 byte.
+# text is converted to string first. Returns a string; combining marks and multi-code-point grapheme
+#   clusters are reversed as separate code points.
+@reverse END
+func reverse(text) {
+    let runes = strings.ToRunes(string(text))
+    let out = []
+    let i = len(runes) - 1
+    while i >= 0 {
+        out.append(runes[i])
+        i = i - 1
+    }
+    return strings.FromRunes(out)
+}
+
+@non_empty HEAD
+# non_empty trims each value's surrounding whitespace and joins non-blank items.
+# parts is an iterable collection; each item is converted to text. separator is inserted only between
+#   retained items. Returns "" if all items are blank.
+@non_empty END
+func non_empty(parts, separator) {
+    let kept = []
+    for part in parts {
+        let item = strings.TrimSpace(string(part))
+        if item != "" {
+            kept.append(item)
+        }
+    }
+    return strings.Join(kept, separator)
+}
+
+@split_lines HEAD
+# split_lines splits text at LF and removes one terminal empty field caused by
+# a final newline. A CR immediately before LF (or the final LF) is removed. text is string-converted;
+#   interior blank lines are retained and all trailing CR characters on each line are removed. Returns [] for empty
+#   input after splitting and removal of the trailing empty field.
+@split_lines END
+func split_lines(text) {
+    let lines = strings.Split(string(text), "\n")
+    let out = []
+    for line in lines {
+        out.append(strings.TrimRight(line, "\r"))
+    }
+    if len(out) > 0 and out[len(out) - 1] == "" {
+        return out[:len(out) - 1]
+    }
+    return out
+}
+
+@truncate HEAD
+# truncate limits text to at most max_runes Unicode code points.
+# max_runes <= 0 returns ""; text already within the limit is returned as-is. If truncation is needed,
+#   suffix is included within the same limit; if suffix itself is too long it is truncated. Grapheme clusters are
+#   not preserved.
+@truncate END
+func truncate(text, max_runes, suffix) {
+    let runes = strings.ToRunes(string(text))
+    if max_runes <= 0 {
+        return ""
+    }
+    if len(runes) <= max_runes {
+        return string(text)
+    }
+    let suffix_runes = strings.ToRunes(string(suffix))
+    if len(suffix_runes) > max_runes {
+        let shortened = []
+        let j = 0
+        while j < max_runes {
+            shortened.append(suffix_runes[j])
+            j = j + 1
+        }
+        return strings.FromRunes(shortened)
+    }
+    let keep = max_runes - len(suffix_runes)
+    let out = []
+    let i = 0
+    while i < keep {
+        out.append(runes[i])
+        i = i + 1
+    }
+    return strings.FromRunes(out) + string(suffix)
+}
+
+@string_utils_normalize_space HEAD
+# 将 text 转成字符串、去除首尾空白，并把连续 ASCII 空白压成单个空格。
+# 连续空白按正则引擎的 \s 规则识别；空白-only 输入返回空字符串。
+@string_utils_normalize_space END
+func string_utils_normalize_space(text) {
+    let normalized = strings.TrimSpace(string(text))
+    if normalized == "" {
+        return ""
+    }
+    let parts = regex.split("\\s+", normalized, -1)
+    return strings.Join(parts, " ")
+}
+
+@string_utils_replace_many HEAD
+# 按 replacements 顺序依次对 text 执行全量文本替换，返回最终字符串。
+# replacements 每项须为 [old, new]；替换会级联，空 old、非法项或转换错误遵从 strings.Replace 的行为。
+@string_utils_replace_many END
+func string_utils_replace_many(text, replacements) {
+    let result = string(text)
+    for pair in replacements {
+        assert(len(pair) == 2, "each replacement must contain [old, new]")
+        result = strings.Replace(result, string(pair[0]), string(pair[1]))
+    }
+    return result
+}

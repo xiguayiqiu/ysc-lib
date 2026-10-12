@@ -1,0 +1,95 @@
+package encoding_utils
+import ["encoding", "string"]
+
+@base64_round_trip HEAD
+# 对 text 进行 Base64 编码后立即解码，返回字节值。
+# text 可为文本或原生编码函数支持的值；编码/解码错误按原生行为抛出。
+@base64_round_trip END
+func base64_round_trip(text) {
+    return encoding.base64_decode(encoding.base64_encode(text))
+}
+
+@hex_round_trip HEAD
+# 对 data 进行十六进制编码后立即解码，返回字节值。
+# 输入可为字节或由原生函数转成文本的值；原生 hex 解码错误会抛出。
+@hex_round_trip END
+func hex_round_trip(data) {
+    return encoding.hex_decode(encoding.hex_encode(data))
+}
+
+@decode_url_or HEAD
+# 对 text 执行原生 URL 解码；原生调用抛错时返回 fallback。
+# 百分号转义不完整或无效时遵循原生实现，原生解码器可能保留异常片段而不
+#   报错。
+@decode_url_or END
+func decode_url_or(text, fallback) {
+    return encoding.url_decode(text) catch fallback
+}
+
+@html_escape HEAD
+# 先将 text 转为字符串，再调用原生 HTML 编码，返回编码后的字符串。
+# 原生实现只替换其定义的常见 HTML 符号，具体实体范围受其替换表限制。
+@html_escape END
+func html_escape(text) {
+    return encoding.html_encode(string(text))
+}
+
+@encoding_html_unescape HEAD
+# 先将输入转为字符串，再调用原生 HTML 解码并返回结果。
+# 仅替换原生 encoding.html_decode 识别的实体；未识别实体保持不变。
+@encoding_html_unescape END
+func encoding_html_unescape(text) {
+    return encoding.html_decode(string(text))
+}
+
+@encoding_base64_to_text HEAD
+# 将输入进行 Base64 编码再解码，并把得到的字节转换为 YScript 字符串返回。
+# 适用于文本内容；任意二进制字节不一定能无损地作为文本使用，且字符串转
+#   换遵循运行时规则。
+@encoding_base64_to_text END
+func encoding_base64_to_text(text) {
+    return string(encoding.base64_decode(encoding.base64_encode(text)))
+}
+
+@encoding_utils_encode_as HEAD
+# 按 format 选择编码方式：base64、hex、url 或 html，并返回原生编码结果。
+# format 不区分大小写；data 按对应原生函数的规则处理；不支持的格式会触发断言错误。
+@encoding_utils_encode_as END
+func encoding_utils_encode_as(format, data) {
+    let mode = strings.ToLower(string(format))
+    if mode == "base64" {
+        return encoding.base64_encode(data)
+    }
+    if mode == "hex" {
+        return encoding.hex_encode(data)
+    }
+    if mode == "url" {
+        return encoding.url_encode(data)
+    }
+    if mode == "html" {
+        return encoding.html_encode(data)
+    }
+    assert(false, "unsupported encoding format: " + mode)
+}
+
+@encoding_utils_decode_as HEAD
+# 按 format 选择解码方式：base64、hex、url 或 html，并返回解码结果。
+# format 不区分大小写；二进制解码返回 bytes，url/html 解码返回文本；
+# 无效数据遵循原生解码函数的错误行为，不支持的格式会触发断言错误。
+@encoding_utils_decode_as END
+func encoding_utils_decode_as(format, data) {
+    let mode = strings.ToLower(string(format))
+    if mode == "base64" {
+        return encoding.base64_decode(data)
+    }
+    if mode == "hex" {
+        return encoding.hex_decode(data)
+    }
+    if mode == "url" {
+        return encoding.url_decode(data)
+    }
+    if mode == "html" {
+        return encoding.html_decode(data)
+    }
+    assert(false, "unsupported encoding format: " + mode)
+}

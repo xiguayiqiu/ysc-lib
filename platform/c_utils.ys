@@ -1,0 +1,11 @@
+package c_utils
+import ["c"]
+
+@available_compilers HEAD
+# available_compilers() 返回 c.compilers 探测到的 C/C++ 编译器信息。
+# 探测本机 PATH 和 YSC_CC/CC/YSC_CXX/CXX 配置， 可能执行编译器的 --version 子进程；
+#   结果受本机工具链、进程策略及编译器安装情况影响； 查询失败遵从底层结果。
+@available_compilers END
+func available_compilers() {
+    return c.compilers()
+}

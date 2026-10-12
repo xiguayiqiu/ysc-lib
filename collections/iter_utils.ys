@@ -1,0 +1,68 @@
+package iter_utils
+import ["iter"]
+
+@collect HEAD
+# collect consumes iterator and returns its yielded items as a list.
+# iterator must be accepted by YScript's for-in iteration protocol. Returns an empty list when it yields
+#   nothing; iteration errors follow the runtime behavior.
+@collect END
+func collect(iterator) {
+    let out = []
+    for item in iterator {
+        out.append(item)
+    }
+    return out
+}
+
+@lines HEAD
+# lines converts text to the standard iter.lines list.
+# text is converted with string(); each LF-delimited segment is returned, including any terminal empty
+#   segment according to iter.lines behavior.
+@lines END
+func lines(text) {
+    return iter.lines(string(text))
+}
+
+@byte_values HEAD
+# byte_values converts byte data to a list of integer byte values.
+# data must be a bytes value accepted by iter.bytes; other types produce the standard library's type
+#   error.
+@byte_values END
+func byte_values(data) {
+    return iter.bytes(data)
+}
+
+@take_list HEAD
+# take_list returns at most count leading elements from values.
+# A negative count is treated as zero; a count larger than the list length is clamped to that length. The
+#   result is a new outer list in original order.
+@take_list END
+func take_list(values, count) {
+    let out = []
+    let limit = count
+    if limit < 0 {
+        limit = 0
+    }
+    let i = 0
+    while i < len(values) and i < limit {
+        out.append(values[i])
+        i = i + 1
+    }
+    return out
+}
+
+@iter_utils_chain HEAD
+# iter_utils_chain concatenates a list of lists in order.
+# Every member of groups must be iterable (normally a list); each contained item is appended once, so
+#   nested lists inside a group are left intact. Returns a new flat list; invalid/non-iterable groups raise the
+#   runtime error.
+@iter_utils_chain END
+func iter_utils_chain(groups) {
+    let out = []
+    for group in groups {
+        for item in group {
+            out.append(item)
+        }
+    }
+    return out
+}

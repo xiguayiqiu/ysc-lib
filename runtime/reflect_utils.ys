@@ -1,0 +1,128 @@
+package reflect_utils
+import ["reflect"]
+
+@has_all_fields HEAD
+# 使用 reflect.has 检查 object 是否包含 names 中的全部字段/键，全部存在时返回
+#   true。
+# names 为空时返回 true；原生 reflect.has
+#   仅支持结构体和字典等其定义的对象，其他类型视为无字段。
+@has_all_fields END
+func has_all_fields(object, names) {
+    for name in names {
+        if not reflect.has(object, string(name)) {
+            return false
+        }
+    }
+    return true
+}
+
+@clone HEAD
+# 调用 reflect.deep_copy 深拷贝 value 并返回副本。
+# 原生实现递归复制列表、字典、结构体和字节值；标量保持值相同，其他类型
+#   遵循原生复制实现。
+@clone END
+func clone(value) {
+    return reflect.deep_copy(value)
+}
+
+@to_json HEAD
+# 调用 reflect.to_json 将 value 编码为紧凑 JSON 文本并返回字符串。
+# 不支持值的处理及编码错误行为遵循原生实现；该操作不保证所有运行时值均
+#   可无损往返。
+@to_json END
+func to_json(value) {
+    return reflect.to_json(value)
+}
+
+@from_json HEAD
+# 将 text 作为 JSON 文本传给
+#   reflect.from_json，并以空类型名作为其必需的首参数。
+# 原生实现当前忽略类型名并按 JSON 内容推断返回值；JSON 解析错误会抛出。
+@from_json END
+func from_json(text) {
+    return reflect.from_json("", string(text))
+}
+
+@reflect_has_all_fields HEAD
+# has_all_fields 的模块前缀别名；names 为空时返回 true。
+# 字段支持范围及返回行为与 has_all_fields 相同。
+@reflect_has_all_fields END
+func reflect_has_all_fields(object, names) {
+    return has_all_fields(object, names)
+}
+
+@reflect_clone HEAD
+# clone 的模块前缀别名；递归复制原生支持的嵌套值。
+# 参数、返回值及其他类型处理均与 clone 相同。
+@reflect_clone END
+func reflect_clone(value) {
+    return clone(value)
+}
+
+@reflect_to_json HEAD
+# to_json 的模块前缀别名，返回紧凑 JSON 字符串。
+# 编码限制和错误行为与 to_json 相同。
+@reflect_to_json END
+func reflect_to_json(value) {
+    return to_json(value)
+}
+
+@reflect_from_json HEAD
+# from_json 的模块前缀别名；JSON 解析失败时抛错。
+# 类型推断及原生忽略类型名的行为与 from_json 相同。
+@reflect_from_json END
+func reflect_from_json(text) {
+    return from_json(text)
+}
+
+@reflect_type_name HEAD
+# 调用 reflect.type_of 返回 value 的运行时类型名字符串。
+# 不传入参数的情形不适用于本包装函数；类型命名规则由原生实现定义。
+@reflect_type_name END
+func reflect_type_name(value) {
+    return reflect.type_of(value)
+}
+
+@reflect_fields_of HEAD
+# 调用 reflect.fields 并返回字段列表：结构体字段表示为含 name、type、value
+#   的字典；
+# 字典字段表示为按键顺序排列的 [key, value] 二元列表；其他类型返回空列表。
+@reflect_fields_of END
+func reflect_fields_of(value) {
+    return reflect.fields(value)
+}
+
+@reflect_get_or HEAD
+# 读取 object 的 field 并返回其值；字段不存在或原生 reflect.has
+#   判定不支持时返回 fallback。
+# 若成员存在但值为 nil，也返回 fallback；对象类型支持范围遵循 reflect.has /
+#   reflect.get。
+@reflect_get_or END
+func reflect_get_or(object, field, fallback) {
+    if not reflect.has(object, string(field)) {
+        return fallback
+    }
+    let value = reflect.get(object, string(field))
+    if value == nil {
+        return fallback
+    }
+    return value
+}
+
+@reflect_is_number HEAD
+# 调用 reflect.is_number 判断 value
+#   是否为整数、无符号整数或浮点数并返回布尔值。
+# 布尔值和看似数字的字符串不算数值；其他类型判定遵循原生实现。
+@reflect_is_number END
+func reflect_is_number(value) {
+    return reflect.is_number(value)
+}
+
+@reflect_is_collection HEAD
+# 调用 reflect.is_collection 判断 value
+#   是否为列表、字典、字符串或字节值并返回布尔值。
+# 结构体不属于原生函数认定的集合；其余类型遵循原生判定。
+@reflect_is_collection END
+func reflect_is_collection(value) {
+    return reflect.is_collection(value)
+}

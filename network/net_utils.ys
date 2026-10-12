@@ -1,0 +1,124 @@
+package net_utils
+import ["net", "http"]
+
+@resolve_host HEAD
+# resolve_host(host) 解析域名或主机名，返回底层 DNS 查询得到的 IP
+#   地址字符串列表。
+# host 按字符串转换；网络策略不允许联网、名称无效或 DNS 查询失败时， 沿用
+#   net.LookupHost 的错误。
+@resolve_host END
+func resolve_host(host) {
+    return net.LookupHost(host)
+}
+
+@is_ip HEAD
+# is_ip(host) 检查输入能否解析为 IPv4/IPv6 字面地址；返回布尔值，不执行 DNS
+#   查询。
+# 缺少参数、格式无效时底层接口返回 false；该判断不需要网络权限。
+@is_ip END
+func is_ip(host) {
+    return net.IsIP(host)
+}
+
+@ip_version HEAD
+# ip_version(host) 返回 IP 字面地址的版本号 4 或 6；不是合法 IP 时返回 0。
+# 不执行 DNS 查询，也不需要网络权限。
+@ip_version END
+func ip_version(host) {
+    return net.IPVersion(host)
+}
+
+@tcp_address HEAD
+# tcp_address(host, port) 格式化 TCP host:port 地址；IPv6 字面地址会自动加方括号。
+# 返回字符串，不校验端口范围、主机名或 DNS；调用方应传入有效端口。
+@tcp_address END
+func tcp_address(host, port) {
+    let name = string(host)
+    if net.IPVersion(name) == 6 {
+        name = "[" + name + "]"
+    }
+    return name + ":" + string(port)
+}
+
+@tcp_open HEAD
+# tcp_open(host, port, timeout) 尝试建立 TCP 连接，连接成功即关闭并返回
+#   true，失败返回 false。
+# timeout 单位为秒；非正值采用 net.DialTimeout 的默认 2 秒。需要网络权限；
+#   连接拒绝、解析失败、超时等连接错误由底层表示为 null，因此在此统一映射成
+#   false；
+#   策略拒绝等非连接错误仍会抛出。
+@tcp_open END
+func tcp_open(host, port, timeout) {
+    let conn = net.DialTimeout(tcp_address(host, port), timeout)
+    if conn == nil {
+        return false
+    }
+    net.ConnClose(conn.id)
+    return true
+}
+
+@scan_tcp HEAD
+# scan_tcp(host, ports, timeout) 顺序探测端口列表，返回成功项的 {host, port, address}
+#   字典列表。
+# timeout
+#   单位为秒；每个端口都发起一次需要网络权限的连接尝试，耗时可累加。
+#   无法连接的端口不进入结果；策略错误仍会抛出。ports 应是可迭代的端口值列表。
+@scan_tcp END
+func scan_tcp(host, ports, timeout) {
+    let opened = []
+    for port in ports {
+        if tcp_open(host, port, timeout) {
+            opened.append({
+                "host": string(host),
+                "port": int(port),
+                "address": tcp_address(host, port),
+            })
+        }
+    }
+    return opened
+}
+
+@tcp_exchange HEAD
+# tcp_exchange(host, port, payload, max_bytes, timeout) 建立 TCP 连接、写入 payload
+#   并读取一次响应。
+# 返回 {written: 写入字节数, data: bytes 或 null}；timeout 单位为秒， max_bytes
+#   是正整数形式的单次读取上限。 需要网络权限；连接失败返回 null，
+#   连接建立后始终关闭； 读超时/EOF 等遵从 net.ConnRead 的 null 语义。
+@tcp_exchange END
+func tcp_exchange(host, port, payload, max_bytes, timeout) {
+    if max_bytes <= 0 {
+        return nil
+    }
+    let conn = net.DialTimeout(tcp_address(host, port), timeout)
+    if conn == nil {
+        return nil
+    }
+    defer net.ConnClose(conn.id)
+
+    let written = net.ConnWrite(conn.id, payload)
+    let response = net.ConnRead(conn.id, max_bytes, timeout)
+    return {
+        "written": written,
+        "data": response,
+    }
+}
+
+@http_get HEAD
+# http_get(url) 调用 http.Get 并原样返回响应字典或 null。
+# 需要允许发起网络请求；HTTP 状态码不代表传输错误，
+#   状态和响应字段由底层响应对象提供。 URL、策略拒绝及请求错误遵从 http.Get
+#   的错误边界。
+@http_get END
+func http_get(url) {
+    return http.Get(url)
+}
+
+@http_post HEAD
+# http_post(url, body) 调用 http.Post 并原样返回响应字典或 null。
+# 需要允许发起网络请求；body 编码和默认 Content-Type 遵从 http.Post，
+#   不会自动序列化对象。 HTTP 非成功状态仍可能返回响应；无效
+#   URL、策略拒绝及传输错误遵从底层接口。
+@http_post END
+func http_post(url, body) {
+    return http.Post(url, body)
+}

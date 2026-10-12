@@ -1,0 +1,36 @@
+package sync_utils
+import ["sync"]
+
+@semaphore HEAD
+# semaphore(size) 创建容量为 size 的同步信号量对象；size 小于 1 时规范为 1。
+# 返回 sync.Semaphore 的原生对象；获取/释放和阻塞行为由该对象的方法提供。
+#   适用于当前运行时支持的 warp 并发协程；无操作系统权限或平台限制。
+@semaphore END
+func semaphore(size) {
+    if size < 1 {
+        size = 1
+    }
+    return sync.Semaphore(int(size))
+}
+
+@worker_pool HEAD
+# worker_pool(size) 创建含 size 个工作槽的 worker pool；size 小于 1 时规范为 1。
+# 返回 sync.WorkerPool
+#   的原生对象，任务调度、等待和错误行为遵从底层对象接口。
+#   适用于当前运行时支持的 warp 并发协程；工作函数抛错时的传播遵从底层实现。
+@worker_pool END
+func worker_pool(size) {
+    if size < 1 {
+        size = 1
+    }
+    return sync.WorkerPool(int(size))
+}
+
+@atomic_counter HEAD
+# atomic_counter(initial) 创建以 initial 初始化的原子整数对象并返回底层 sync.Atomic
+#   对象。
+# 具体读写/增减方法及溢出行为遵从 sync.Atomic；无平台权限要求。
+@atomic_counter END
+func atomic_counter(initial) {
+    return sync.Atomic(int(initial))
+}

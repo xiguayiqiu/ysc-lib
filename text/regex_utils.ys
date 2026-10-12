@@ -1,0 +1,92 @@
+package regex_utils
+import ["regex"]
+
+@first_match HEAD
+# 在 text 中查找 pattern 的首个非空匹配；未匹配或结果为空字符串时返回
+#   fallback。
+# 非法正则表达式由原生 regex.find 抛错；pattern 语法受 Go regexp 支持范围限制。
+@first_match END
+func first_match(pattern, text, fallback) {
+    let found = regex.find(pattern, string(text))
+    if found == nil or found == "" {
+        return fallback
+    }
+    return found
+}
+
+@regex_matches HEAD
+# 返回 text 中 pattern 的全部匹配字符串列表，使用原生 regex.find_all
+#   的默认数量限制。
+# 非法模式由原生实现处理并返回空列表；正则语法受 Go regexp 支持范围限制。
+@regex_matches END
+func regex_matches(pattern, text) {
+    return regex.find_all(pattern, string(text))
+}
+
+@replace_once HEAD
+# 将 text 中 pattern 的首个匹配替换为 replacement 字符串，返回替换后的文本。
+# 非法模式由原生 regex.replace_fn
+#   抛错；空匹配位置和替换次数遵循正则引擎规则。
+@replace_once END
+func replace_once(pattern, text, replacement) {
+    let replaced = false
+    return regex.replace_fn(pattern, string(text), func(found) {
+        if replaced {
+            return found
+        }
+        replaced = true
+        return string(replacement)
+    })
+}
+
+@named_groups HEAD
+# 返回首个匹配的捕获字典；无匹配时返回 nil。_full 保存完整匹配。
+# 命名捕获以组名为键，未命名捕获以从 1
+#   开始的组序号字符串为键；非法模式错误由原生函数抛出。
+@named_groups END
+func named_groups(pattern, text) {
+    return regex.named(pattern, string(text))
+}
+
+@regex_first_match_or HEAD
+# first_match 的模块前缀别名；无匹配或空匹配时返回 fallback。
+# 参数和非法模式错误行为与 first_match 相同。
+@regex_first_match_or END
+func regex_first_match_or(pattern, text, fallback) {
+    return first_match(pattern, text, fallback)
+}
+
+@regex_replace_once HEAD
+# replace_once 的模块前缀别名；只替换首个匹配。
+# 参数、返回值和正则引擎边界与 replace_once 相同。
+@regex_replace_once END
+func regex_replace_once(pattern, text, replacement) {
+    return replace_once(pattern, text, replacement)
+}
+
+@regex_named_groups HEAD
+# named_groups 的模块前缀别名；没有匹配时返回 nil。
+# 捕获组字典结构及非法模式错误行为与 named_groups 相同。
+@regex_named_groups END
+func regex_named_groups(pattern, text) {
+    return named_groups(pattern, text)
+}
+
+@regex_matches_text HEAD
+# 判断 pattern 是否能匹配 text 中任意部分并返回布尔值。
+# 非法模式由原生 regex.match 作为 false 处理而非抛错；语法受 Go regexp
+#   支持范围限制。
+@regex_matches_text END
+func regex_matches_text(pattern, text) {
+    return regex.match(pattern, string(text))
+}
+
+@regex_split_text HEAD
+# 按 pattern 切分 text，并将 limit 传给原生 regex.split；返回字符串列表。
+# limit 为负数时不限数量，为 0
+#   时不返回切分项；非法模式由原生实现处理为空列表。 limit
+#   是本函数的必需参数；模式语法受 Go regexp 支持范围限制。
+@regex_split_text END
+func regex_split_text(pattern, text, limit) {
+    return regex.split(pattern, string(text), limit)
+}

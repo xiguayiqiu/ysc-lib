@@ -1,0 +1,39 @@
+package log_utils
+import ["log", "string"]
+
+@with_fields HEAD
+# with_fields(level, fields, message) 将 fields 的键值对拼成 `key=value` 后缀并按 level
+#   写日志。
+# fields 必须支持 keys() 与索引读取（通常为 dict）；返回 log.log 的结果。
+#   字段按字典遍历顺序输出，不做 JSON 转义或脱敏；
+#   未知级别和日志写入错误遵从底层异常。
+@with_fields END
+func with_fields(level, fields, message) {
+    let parts = []
+    for key in fields.keys() {
+        parts.append(string(key) + "=" + string(fields[key]))
+    }
+    let suffix = strings.Join(parts, " ")
+    if suffix == "" {
+        return log.log(level, message)
+    }
+    return log.log(level, string(message) + " " + suffix)
+}
+
+@flush HEAD
+# flush() 刷新底层日志输出；返回 log.flush 的结果。
+# 日志器若配置文件输出，刷新失败沿用底层错误；全局日志状态/目标由 log
+#   模块共享。
+@flush END
+func flush() {
+    return log.flush()
+}
+
+@close HEAD
+# close() 关闭底层日志文件输出并返回 log.close 的结果。
+# 不影响 stderr/stdout 本身；文件关闭错误遵从底层 API，后续日志行为由 log
+#   模块处理。
+@close END
+func close() {
+    return log.close()
+}

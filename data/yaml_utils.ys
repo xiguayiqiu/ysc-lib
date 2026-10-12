@@ -1,0 +1,46 @@
+package yaml_utils
+import ["yaml"]
+
+@yaml_parse_text HEAD
+# 将 YAML 文本解析为 YScript 字典、列表、标量或 nil，并返回解析值。
+# 无效 YAML 由原生解析器抛错；原生 yaml.Unmarshal 仅返回一个文档。
+#   标量类型转换遵循原生 YAML 解码规则。
+@yaml_parse_text END
+func yaml_parse_text(text) {
+    return yaml.parse(string(text))
+}
+
+@yaml_parse_file HEAD
+# 读取 path 指定的 YAML 文件并返回解析后的 YScript 值。
+# 文件读取或 YAML 解码失败由原生 yaml.from_file
+#   抛出；文档和标量转换规则遵循原生实现。
+@yaml_parse_file END
+func yaml_parse_file(path) {
+    return yaml.from_file(path)
+}
+
+@yaml_parse_or HEAD
+# 解析 YAML 文本；解析抛错时返回 fallback。
+# 有效 YAML null 解析结果仍为 nil，不会被替换成 fallback；仅解码单个文档。
+@yaml_parse_or END
+func yaml_parse_or(text, fallback) {
+    return yaml.parse(string(text)) catch fallback
+}
+
+@yaml_get_or HEAD
+# 解析 text 并读取根字典中 key 对应的直接成员；解析失败、根值为
+#   nil、键缺失或值为 nil 时返回 fallback。
+# 不遍历嵌套路径；根值不是可按键访问的字典时，访问错误遵循 YScript
+#   运行时行为。
+@yaml_get_or END
+func yaml_get_or(text, key, fallback) {
+    let document = yaml.parse(string(text)) catch nil
+    if document == nil {
+        return fallback
+    }
+    let value = document[string(key)]
+    if value == nil {
+        return fallback
+    }
+    return value
+}

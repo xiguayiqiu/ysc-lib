@@ -1,0 +1,84 @@
+package json_utils
+import ["json"]
+
+@json_parse_or HEAD
+# 解析 JSON 文本；输入为 JSON 字符串和错误时返回的 fallback。
+# 解析成功返回对应 YScript 值；解析失败（包括 JSON
+#   文档后有额外数据）时原样返回 fallback。
+@json_parse_or END
+func json_parse_or(text, fallback) {
+    return json.parse(text) catch fallback
+}
+
+@encode_or HEAD
+# 将 value 编码为紧凑 JSON 字符串；输入为任意 YScript 值和错误时返回的
+#   fallback。
+# 若原生 json.stringify 抛错则返回
+#   fallback；原生实现对部分不支持的值会直接编码为 null，而非报错。
+@encode_or END
+func encode_or(value, fallback) {
+    return json.stringify(value) catch fallback
+}
+
+@json_pretty_or HEAD
+# 使用 json.pretty_print 将 value 编码为带缩进的 JSON 字符串。
+# 原生调用抛错时返回 fallback；缺失值及非 JSON 值的处理遵循原生实现。
+@json_pretty_or END
+func json_pretty_or(value, fallback) {
+    return json.pretty_print(value) catch fallback
+}
+
+@json_read_or HEAD
+# 读取 path 指定的文件并解析其中的 JSON；成功返回解析后的值。
+# 文件读取或 JSON 解析失败时返回 fallback；路径直接交由原生 json.from_file 处理。
+@json_read_or END
+func json_read_or(path, fallback) {
+    return json.from_file(path) catch fallback
+}
+
+@json_write_file HEAD
+# 将 value 编码为紧凑 JSON 并写入 path 指定的文件；成功时返回原生函数的
+#   nil。
+# 序列化或文件写入错误由原生 json.to_file
+#   抛出；该原生编码实现可能将部分编码问题处理为 null。
+@json_write_file END
+func json_write_file(path, value) {
+    return json.to_file(path, value)
+}
+
+@get_or HEAD
+# 从字典 object 中读取 key 对应的直接成员；输入包括 object、key 和 fallback。
+# object 为 nil、成员缺失或成员值为 nil 时返回 fallback；不解析嵌套路径。
+@get_or END
+func get_or(object, key, fallback) {
+    if object == nil {
+        return fallback
+    }
+    let value = object[string(key)]
+    if value == nil {
+        return fallback
+    }
+    return value
+}
+
+@require_keys HEAD
+# 返回 keys 中在 object 里缺失或对应值为 nil 的键名列表。
+# object 为 nil 时 keys 中所有键均视为缺失；不检查嵌套成员。
+@require_keys END
+func require_keys(object, keys) {
+    let missing = []
+    for key in keys {
+        if object == nil or object[string(key)] == nil {
+            missing.append(string(key))
+        }
+    }
+    return missing
+}
+
+@json_query_or HEAD
+# 使用原生 json.query 对 value 按 path 查询；查询抛错时返回 fallback。
+# 路径不存在通常由原生函数返回 nil（而非抛错），此时本函数也返回 nil。
+@json_query_or END
+func json_query_or(value, path, fallback) {
+    return json.query(value, path) catch fallback
+}

@@ -1,0 +1,1215 @@
+package yui
+import ["event", "rand", "strings"]
+
+@yui_create HEAD
+# 创建一个独立的 YUI 状态对象，供所有控件和事件处理函数复用。
+# 同一窗口通常创建一个状态对象；每个状态对象包含自己的主题、控件、输入焦点和布局状态。
+@yui_create END
+func yui_create() {
+    return {
+        "__yui_state_id": rand.uuid(),
+        "initialized": false,
+        "widgets": [],
+        "widget_ids": {},
+        "pending_clicks": [],
+        "frame_clicks": [],
+        "pressed": nil,
+        "focused": "",
+        "mouse_x": 0,
+        "mouse_y": 0,
+        "values": {},
+        "cursors": {},
+        "checks": {},
+        "open": "",
+        "groups": {},
+        "layout": nil,
+        "theme": {
+            "background": "#202124",
+            "surface": "#303134",
+            "surface_hover": "#3c4043",
+            "surface_pressed": "#5f6368",
+            "border": "#5f6368",
+            "accent": "#8ab4f8",
+            "text": "#e8eaed",
+            "muted": "#9aa0a6",
+            "input": "#202124",
+            "selected": "#3c4043",
+            "disabled": "#5f6368",
+            "danger": "#f28b82",
+        },
+    }
+}
+
+# 创建类似 Java JFrame 的窗口对象；窗口设置、组件和控件状态保存在同一对象中。
+func JFrame(title, width, height) {
+    assert(title != "" and width > 48 and height > 0, "JFrame title and dimensions must be valid")
+    let frame = yui_create()
+    frame.window_title = title
+    frame.window_width = width
+    frame.window_height = height
+    frame.components = []
+    frame.layout_x = 24
+    frame.layout_y = 24
+    frame.layout_width = width - 48
+    frame.layout_gap = 10
+    frame.action_handler = ""
+    frame.visible = false
+    return frame
+}
+
+func _yui_swing_component(kind, text, height) {
+    return {"kind": kind, "text": string(text), "height": height, "value": ""}
+}
+
+# 创建静态文本组件，供 add(frame, component) 加入窗口。
+func JLabel(text) {
+    return _yui_swing_component("label", text, 24)
+}
+
+# 创建按钮组件；按钮点击后可由 onAction() 注册的处理函数查询。
+func JButton(text) {
+    return _yui_swing_component("button", text, 38)
+}
+
+# 创建单行文本输入组件；返回的组件字典 value 字段会随用户输入更新。
+func JTextField(initial_text) {
+    let component = _yui_swing_component("textfield", "", 38)
+    component.value = string(initial_text)
+    component.placeholder = ""
+    component.max_length = 256
+    return component
+}
+
+# 创建多行文本输入组件；返回的组件字典 value 字段会随用户输入更新。
+func JTextArea(initial_text) {
+    let component = _yui_swing_component("textarea", "", 100)
+    component.value = string(initial_text)
+    component.placeholder = ""
+    component.max_length = 4096
+    return component
+}
+
+# 创建密码输入组件；绘制时遮蔽文本，真实文本保存在组件的 value 字段中。
+func JPasswordField() {
+    let component = _yui_swing_component("password", "", 38)
+    component.value = ""
+    component.placeholder = "Password"
+    component.max_length = 256
+    return component
+}
+
+# 创建复选框组件；checked 指定首次显示时的状态。
+func JCheckBox(text, checked) {
+    let component = _yui_swing_component("checkbox", text, 28)
+    component.value = checked
+    return component
+}
+
+# 创建范围滑块组件；初始值必须位于最小值与最大值之间。
+func JSlider(minimum, maximum, initial) {
+    assert(minimum < maximum and initial >= minimum and initial <= maximum, "JSlider range or initial value is invalid")
+    let component = _yui_swing_component("slider", "", 30)
+    component.minimum = minimum
+    component.maximum = maximum
+    component.value = initial
+    return component
+}
+
+# 在窗口纵向布局中添加组件并返回组件；重复添加同一组件会报错。
+func add(frame, component) {
+    assert(frame.components != nil and component.id == nil, "add expects a JFrame and a component that is not already attached")
+    component.id = "component:" + string(len(frame.components))
+    component.x = frame.layout_x
+    component.y = frame.layout_y
+    component.width = frame.layout_width
+    frame.layout_y = frame.layout_y + component.height + frame.layout_gap
+    frame.components.append(component)
+    return component
+}
+
+# 设置窗口标题；窗口已显示时立即更新原生窗口标题。
+func setTitle(frame, title) {
+    assert(title != "", "JFrame title must not be empty")
+    frame.window_title = title
+    if frame.visible {
+        yui_window(frame.window_title, frame.window_width, frame.window_height)
+    }
+    return frame
+}
+
+# 设置窗口尺寸；窗口已显示时立即更新窗口尺寸及默认纵向布局宽度。
+func setSize(frame, width, height) {
+    assert(width > 48 and height > 0, "JFrame dimensions must be valid")
+    frame.window_width = width
+    frame.window_height = height
+    frame.layout_width = width - 48
+    if frame.visible {
+        yui_window(frame.window_title, width, height)
+    }
+    return frame
+}
+
+# 注册窗口内任意按钮的统一点击回调；回调参数为 x、y、button、frame。
+func onAction(frame, callback_name) {
+    assert(type(callback_name) == "string" and callback_name != "", "JFrame action callback name must not be empty")
+    frame.action_handler = callback_name
+    if frame.visible {
+        yui_on_state("mouse_up", callback_name, frame)
+    }
+    return frame
+}
+
+# 判断给定按钮是否在当前输入回调中刚刚被点击。
+func wasClicked(frame, component) {
+    assert(component.id != nil, "wasClicked expects a component added to a JFrame")
+    let index = 0
+    while index < len(frame.pending_clicks) {
+        if frame.pending_clicks[index] == component.id {
+            return true
+        }
+        index = index + 1
+    }
+    return false
+}
+
+func _yui_swing_draw(dt, frame) {
+    yui_begin_frame(frame, frame.theme.background)
+    for component in frame.components {
+        if component.kind == "label" {
+            yui_label(frame, component.x, component.y, component.text, 16, nil)
+        } else if component.kind == "button" {
+            component.clicked = yui_button(
+                frame, component.id, component.x, component.y,
+                component.width, component.height, component.text,
+            )
+        } else if component.kind == "textfield" {
+            component.value = yui_input(
+                frame, component.id, component.x, component.y,
+                component.width, component.height, component.value,
+                component.placeholder, component.max_length,
+            )
+        } else if component.kind == "textarea" {
+            component.value = yui_text_area(
+                frame, component.id, component.x, component.y,
+                component.width, component.height, component.value,
+                component.placeholder, component.max_length,
+            )
+        } else if component.kind == "password" {
+            component.value = yui_password_field(
+                frame, component.id, component.x, component.y,
+                component.width, component.height, component.value,
+                component.placeholder, component.max_length,
+            )
+        } else if component.kind == "checkbox" {
+            component.value = yui_checkbox(
+                frame, component.id, component.x, component.y,
+                component.text, component.value,
+            )
+        } else if component.kind == "slider" {
+            component.value = yui_slider(
+                frame, component.id, component.x, component.y,
+                component.width, component.minimum, component.maximum,
+                component.value,
+            )
+        } else if component.kind == "progress" {
+            yui_progress(
+                frame, component.x, component.y, component.width,
+                component.height, component.value,
+            )
+        }
+    }
+    yui_end_frame()
+    return frame
+}
+
+# 显示 JFrame 并启动自动布局、绘制和控件输入；窗口关闭后返回。
+func show(frame) {
+    assert(frame.components != nil, "show expects a JFrame created by JFrame()")
+    yui_window(frame.window_title, frame.window_width, frame.window_height)
+    yui_on_state("frame", "_yui_swing_draw", frame)
+    if frame.action_handler != "" {
+        yui_on_state("mouse_up", frame.action_handler, frame)
+    }
+    frame.visible = true
+    return yui_run_ui(frame)
+}
+
+@yui_window HEAD
+# 配置原生窗口标题和逻辑画布尺寸。
+# title 必须是非空字符串；width 和 height 必须是 1 到 32768 的整数。
+# 窗口大小使用设备无关像素；可缩放窗口由 ysc-gui 启动器控制。
+@yui_window END
+func yui_window(title, width, height) {
+    return __ysc_gui_window(title, width, height)
+}
+
+@yui_on HEAD
+# 注册窗口事件对应的顶层 YScript 函数名。
+# event_name 支持 frame、key_down、key_up、text、mouse_down、mouse_up、
+#   mouse_move、mouse_wheel、resize；callback_name 必须是可投递的顶层函数名。
+# YUI 内部控件先处理输入，再调用用户注册的同类事件回调。
+@yui_on END
+func yui_on(event_name, callback_name) {
+    return __ysc_gui_on(event_name, callback_name)
+}
+
+@yui_on_state HEAD
+# 注册带 YUI 状态参数的顶层事件回调。
+# 用户回调先收到事件原有参数，再收到 state；frame 回调的参数为 dt、state。
+@yui_on_state END
+func yui_on_state(event_name, callback_name, state) {
+    return __ysc_gui_on(event_name, callback_name, [state])
+}
+
+func _yui_mouse_down(x, y, button, state) {
+    return yui_pointer_down(state, x, y, button)
+}
+
+@yui_pointer_down HEAD
+# 更新控件指针按下状态；通常由 yui_init() 自动调用，也可用于自行接入输入事件的循环。
+# x、y 使用逻辑画布坐标；button 为 left 时命中最上层控件并更新输入框焦点。
+@yui_pointer_down END
+func yui_pointer_down(state, x, y, button) {
+    state.mouse_x = x
+    state.mouse_y = y
+    state.pressed = nil
+    if button != "left" {
+        return state
+    }
+    let index = len(state.widgets) - 1
+    while index >= 0 {
+        let widget = state.widgets[index]
+        if not widget.get("disabled", false) and _yui_hit(widget, x, y) {
+            state.pressed = widget.id
+            if widget.kind == "input" or widget.kind == "password" or widget.kind == "textarea" {
+                state.focused = widget.id
+                let value = state.values.get(widget.id, "")
+                let cursor = int((x - widget.x - 8) / 8)
+                if widget.kind == "textarea" {
+                    let line_height = 18
+                    let lines = strings.Split(value, "\n")
+                    let first_line = widget.get("first_line", 0)
+                    let clicked_line = first_line + int((y - widget.y - 8) / line_height)
+                    if clicked_line > len(lines) - 1 {
+                        clicked_line = len(lines) - 1
+                    }
+                    if clicked_line < 0 {
+                        clicked_line = 0
+                    }
+                    let column = int((x - widget.x - 8) / 8)
+                    if column < 0 {
+                        column = 0
+                    }
+                    cursor = 0
+                    let line = 0
+                    while line < clicked_line {
+                        cursor = cursor + len(strings.ToRunes(lines[line])) + 1
+                        line = line + 1
+                    }
+                    let line_length = len(strings.ToRunes(lines[clicked_line]))
+                    if column > line_length {
+                        cursor = cursor + line_length
+                    } else {
+                        cursor = cursor + column
+                    }
+                }
+                if cursor < 0 {
+                    cursor = 0
+                }
+                if cursor > len(strings.ToRunes(value)) {
+                    cursor = len(strings.ToRunes(value))
+                }
+                state.cursors.set(widget.id, cursor)
+            } else if widget.kind == "slider" {
+                state.focused = ""
+                state.values.set(
+                    widget.id,
+                    _yui_slider_value(widget, x),
+                )
+            } else {
+                state.focused = ""
+            }
+            return state
+        }
+        index = index - 1
+    }
+    state.focused = ""
+    return state
+}
+
+func _yui_mouse_up(x, y, button, state) {
+    return yui_pointer_up(state, x, y, button)
+}
+
+@yui_pointer_up HEAD
+# 更新指针释放状态；按钮/复选框仅在按下和释放都位于同一控件时触发。
+@yui_pointer_up END
+func yui_pointer_up(state, x, y, button) {
+    state.mouse_x = x
+    state.mouse_y = y
+    if button != "left" or state.pressed == nil {
+        state.pressed = nil
+        return state
+    }
+    let widget = _yui_find_widget(state, state.pressed)
+    if _yui_hit(widget, x, y) {
+        if widget.kind == "button" {
+            state.pending_clicks.append(widget.id)
+        }
+        if widget.kind == "checkbox" {
+            state.checks.set(widget.id, not state.checks.get(widget.id, false))
+        } else if widget.kind == "toggle" {
+            state.checks.set(widget.id, not state.checks.get(widget.id, false))
+        } else if widget.kind == "radio" {
+            state.groups.set(widget.group, widget.value)
+        } else if widget.kind == "combo" {
+            if state.open == widget.id {
+                state.open = ""
+            } else {
+                state.open = widget.id
+            }
+        } else if widget.kind == "combo_option" or widget.kind == "list_option" or
+            widget.kind == "tab_option" {
+            state.values.set(widget.owner, widget.index)
+            state.open = ""
+        } else if widget.kind == "spinner_up" {
+            let next = state.values[widget.owner] + widget.step
+            if next > widget.maximum {
+                next = widget.maximum
+            }
+            state.values.set(widget.owner, next)
+        } else if widget.kind == "spinner_down" {
+            let next = state.values[widget.owner] - widget.step
+            if next < widget.minimum {
+                next = widget.minimum
+            }
+            state.values.set(widget.owner, next)
+        }
+    }
+    state.pressed = nil
+    return state
+}
+
+func _yui_mouse_move(x, y, state) {
+    return yui_pointer_move(state, x, y)
+}
+
+@yui_pointer_move HEAD
+# 更新指针位置，供控件绘制 hover 状态。
+@yui_pointer_move END
+func yui_pointer_move(state, x, y) {
+    state.mouse_x = x
+    state.mouse_y = y
+    if state.pressed != nil {
+        let widget = _yui_find_widget(state, state.pressed)
+        if widget != nil and widget.kind == "slider" {
+            state.values.set(widget.id, _yui_slider_value(widget, x))
+        }
+    }
+    return state
+}
+
+func _yui_slider_value(widget, x) {
+    let track_start = widget.x + 8
+    let track_width = widget.width - 16
+    let ratio = (x - track_start) * 1.0 / track_width
+    if ratio < 0 {
+        ratio = 0
+    }
+    if ratio > 1 {
+        ratio = 1
+    }
+    return widget.minimum + ratio * (widget.maximum - widget.minimum)
+}
+
+func _yui_insert_text(value, cursor, addition, max_length) {
+    let runes = strings.ToRunes(value)
+    let added = strings.ToRunes(addition)
+    if max_length > 0 and len(runes) + len(added) > max_length {
+        return {"value": value, "cursor": cursor}
+    }
+    let out = []
+    let index = 0
+    while index < cursor {
+        out.append(runes[index])
+        index = index + 1
+    }
+    for rune in added {
+        out.append(rune)
+    }
+    while index < len(runes) {
+        out.append(runes[index])
+        index = index + 1
+    }
+    return {"value": strings.FromRunes(out), "cursor": cursor + len(added)}
+}
+
+func _yui_remove_at(values, removed_index) {
+    let out = []
+    let index = 0
+    while index < len(values) {
+        if index != removed_index {
+            out.append(values[index])
+        }
+        index = index + 1
+    }
+    return out
+}
+
+func _yui_text_input(text, state) {
+    return yui_text_input(state, text)
+}
+
+@yui_text_input HEAD
+# 将一段 Unicode 文本插入当前聚焦输入框的光标位置；未聚焦输入框时不修改状态。
+@yui_text_input END
+func yui_text_input(state, text) {
+    if state.focused == "" or not state.values.has(state.focused) {
+        return state
+    }
+    let value = state.values[state.focused]
+    let cursor = state.cursors.get(state.focused, len(strings.ToRunes(value)))
+    let widget = _yui_find_widget(state, state.focused)
+    let max_length = 0
+    if widget != nil {
+        max_length = widget.max_length
+    }
+    let updated = _yui_insert_text(value, cursor, text, max_length)
+    state.values.set(state.focused, updated.value)
+    state.cursors.set(state.focused, updated.cursor)
+    return state
+}
+
+func _yui_key_down(key, state) {
+    return yui_key_down(state, key)
+}
+
+@yui_key_down HEAD
+# 处理当前聚焦输入框的编辑按键；支持方向、Home/End、Backspace、Delete、Enter 和 Escape。
+@yui_key_down END
+func yui_key_down(state, key) {
+    if state.focused == "" or not state.values.has(state.focused) {
+        return state
+    }
+    let value = state.values[state.focused]
+    let runes = strings.ToRunes(value)
+    let cursor = state.cursors.get(state.focused, len(runes))
+    let widget = _yui_find_widget(state, state.focused)
+    if key == "Enter" and widget != nil and widget.kind == "textarea" {
+        let updated = _yui_insert_text(value, cursor, "\n", widget.max_length)
+        state.values.set(state.focused, updated.value)
+        state.cursors.set(state.focused, updated.cursor)
+        return state
+    }
+    if key == "Escape" or key == "Enter" {
+        state.focused = ""
+        return state
+    }
+    if key == "ArrowLeft" or key == "Left" {
+        if cursor > 0 {
+            cursor = cursor - 1
+        }
+    } else if key == "ArrowRight" or key == "Right" {
+        if cursor < len(runes) {
+            cursor = cursor + 1
+        }
+    } else if key == "Home" {
+        cursor = 0
+    } else if key == "End" {
+        cursor = len(runes)
+    } else if key == "ArrowUp" or key == "ArrowDown" {
+        let line_start = cursor
+        while line_start > 0 and runes[line_start - 1] != 10 {
+            line_start = line_start - 1
+        }
+        let column = cursor - line_start
+        if key == "ArrowUp" and line_start > 0 {
+            let previous_end = line_start - 1
+            let previous_start = previous_end
+            while previous_start > 0 and runes[previous_start - 1] != 10 {
+                previous_start = previous_start - 1
+            }
+            cursor = previous_start + column
+            if cursor > previous_end {
+                cursor = previous_end
+            }
+        } else if key == "ArrowDown" {
+            let next_start = cursor
+            while next_start < len(runes) and runes[next_start] != 10 {
+                next_start = next_start + 1
+            }
+            if next_start < len(runes) {
+                next_start = next_start + 1
+                let next_end = next_start
+                while next_end < len(runes) and runes[next_end] != 10 {
+                    next_end = next_end + 1
+                }
+                cursor = next_start + column
+                if cursor > next_end {
+                    cursor = next_end
+                }
+            }
+        }
+    } else if key == "Backspace" and cursor > 0 {
+        runes = _yui_remove_at(runes, cursor - 1)
+        cursor = cursor - 1
+        state.values.set(state.focused, strings.FromRunes(runes))
+    } else if key == "Delete" and cursor < len(runes) {
+        runes = _yui_remove_at(runes, cursor)
+        state.values.set(state.focused, strings.FromRunes(runes))
+    }
+    state.cursors.set(state.focused, cursor)
+    return state
+}
+
+@yui_init HEAD
+# 初始化给定状态对象的内建控件事件处理器。
+# 通常由 yui_run_ui() 自动调用；若自行驱动 event loop，应在事件投递前调用。
+# 内部处理器先更新控件状态，再调用 yui_on() 注册的用户回调；同一状态重复初始化无副作用。
+@yui_init END
+func yui_init(state) {
+    assert(type(state) == "dict", "YUI state must be a dictionary from yui_create()")
+    if state.initialized {
+        return state
+    }
+    state.initialized = true
+    __ysc_gui_on_internal("mouse_down", "_yui_mouse_down", [state])
+    __ysc_gui_on_internal("mouse_up", "_yui_mouse_up", [state])
+    __ysc_gui_on_internal("mouse_move", "_yui_mouse_move", [state])
+    __ysc_gui_on_internal("text", "_yui_text_input", [state])
+    __ysc_gui_on_internal("key_down", "_yui_key_down", [state])
+    return state
+}
+
+func _yui_find_widget(state, id) {
+    let index = len(state.widgets) - 1
+    while index >= 0 {
+        let widget = state.widgets[index]
+        if widget.id == id {
+            return widget
+        }
+        index = index - 1
+    }
+    return nil
+}
+
+func _yui_hit(widget, x, y) {
+    return widget != nil and x >= widget.x and y >= widget.y and
+        x <= widget.x + widget.width and y <= widget.y + widget.height
+}
+
+func _yui_register_widget(state, id, kind, x, y, width, height) {
+    assert(type(id) == "string" and id != "", "YUI widget id must be a non-empty string")
+    assert(not state.widget_ids.has(id), "YUI widget ids must be unique in a frame")
+    state.widget_ids.set(id, true)
+    let widget = {
+        "id": id,
+        "kind": kind,
+        "x": x,
+        "y": y,
+        "width": width,
+        "height": height,
+    }
+    state.widgets.append(widget)
+    return widget
+}
+
+@yui_theme_set HEAD
+# 将 theme 中提供的字段覆盖状态对象当前主题；未提供的字段保留原值。
+# 支持 background、surface、surface_hover、surface_pressed、border、accent、text、muted、input。
+# 颜色格式遵循 yui_clear()；传入空字典可保持当前主题不变。
+@yui_theme_set END
+func yui_theme_set(state, theme) {
+    assert(type(theme) == "dict", "YUI theme must be a dictionary")
+    state.theme = state.theme.merge(theme)
+    return state
+}
+
+@yui_begin_frame HEAD
+# 开始一帧控件构建，将背景色排入绘制队列并准备接收控件。
+# 每次 frame 回调应先调用本函数，随后构建控件，最后调用 yui_end_frame()。
+@yui_begin_frame END
+func yui_begin_frame(state, background) {
+    state.widgets = []
+    state.widget_ids = {}
+    state.frame_clicks = state.pending_clicks
+    state.pending_clicks = []
+    state.layout = nil
+    yui_clear(background)
+    return state
+}
+
+@yui_end_frame HEAD
+# 提交当前帧构建的控件与绘图命令，使新场景显示。
+@yui_end_frame END
+func yui_end_frame() {
+    return yui_present()
+}
+
+@yui_panel HEAD
+# 绘制填充面板；坐标和尺寸使用逻辑像素。
+@yui_panel END
+func yui_panel(x, y, width, height, color) {
+    return yui_rect(x, y, width, height, color)
+}
+
+@yui_label HEAD
+# 绘制单行文本标签；color 为 nil 时使用状态对象主题文字色。
+@yui_label END
+func yui_label(state, x, y, content, size, color) {
+    let text_color = color
+    if text_color == nil {
+        text_color = state.theme.text
+    }
+    return yui_text(x, y, string(content), size, text_color)
+}
+
+func _yui_take_click(state, id) {
+    let index = 0
+    while index < len(state.frame_clicks) {
+        if state.frame_clicks[index] == id {
+            state.frame_clicks = _yui_remove_at(state.frame_clicks, index)
+            return true
+        }
+        index = index + 1
+    }
+    return false
+}
+
+func _yui_text_center_x(x, width, content, size) {
+    return x + (width - len(strings.ToRunes(content)) * size * 0.52) / 2
+}
+
+@yui_button HEAD
+# 绘制按钮；id 在同一帧必须唯一，返回值仅在按下并在按钮内释放时为 true。
+# 按钮状态由 yui_init() 注册的输入事件更新。
+@yui_button END
+func yui_button(state, id, x, y, width, height, content) {
+    let widget = _yui_register_widget(state, id, "button", x, y, width, height)
+    let clicked = _yui_take_click(state, id)
+    let fill = state.theme.surface
+    if _yui_hit(widget, state.mouse_x, state.mouse_y) {
+        fill = state.theme.surface_hover
+    }
+    if state.pressed == id {
+        fill = state.theme.surface_pressed
+    }
+    yui_rect(x, y, width, height, fill)
+    yui_rect(x, y, width, 1, state.theme.border)
+    yui_rect(x, y + height - 1, width, 1, state.theme.border)
+    yui_text(_yui_text_center_x(x, width, string(content), 16), y + (height - 16) / 2, string(content), 16, state.theme.text)
+    return clicked
+}
+
+@yui_checkbox HEAD
+# 绘制复选框并返回当前布尔状态；点击会切换状态，checked 仅用于首次出现的 id。
+@yui_checkbox END
+func yui_checkbox(state, id, x, y, content, checked) {
+    let widget = _yui_register_widget(
+        state, id, "checkbox", x, y, 20 + len(strings.ToRunes(string(content))) * 9, 24,
+    )
+    if not state.checks.has(id) {
+        state.checks.set(id, checked)
+    }
+    let selected = state.checks[id]
+    yui_rect(x, y + 2, 18, 18, state.theme.input)
+    yui_rect(x, y + 2, 18, 1, state.theme.border)
+    yui_rect(x, y + 19, 18, 1, state.theme.border)
+    if selected {
+        yui_rect(x + 4, y + 6, 10, 10, state.theme.accent)
+    }
+    let text_color = state.theme.text
+    if _yui_hit(widget, state.mouse_x, state.mouse_y) {
+        text_color = state.theme.accent
+    }
+    yui_text(x + 26, y + 2, string(content), 16, text_color)
+    return selected
+}
+
+@yui_radio HEAD
+# 绘制单选按钮；同一 group 中只能选择一个 value，返回该按钮当前是否选中。
+# 初次遇到 group 时 selected_value 指定默认项；空 group 名或空 id 会报错。
+@yui_radio END
+func yui_radio(state, group, id, x, y, content, value, selected_value) {
+    assert(group != "", "YUI radio group must not be empty")
+    let widget = _yui_register_widget(
+        state, id, "radio", x, y, 22 + len(strings.ToRunes(string(content))) * 9, 24,
+    )
+    widget.group = group
+    widget.value = value
+    let current = state.groups.get(group, selected_value)
+    if not state.groups.has(group) {
+        state.groups.set(group, current)
+    }
+    yui_circle(x + 10, y + 12, 9, state.theme.border)
+    yui_circle(x + 10, y + 12, 7, state.theme.input)
+    if current == value {
+        yui_circle(x + 10, y + 12, 4, state.theme.accent)
+    }
+    yui_text(x + 26, y + 3, string(content), 16, state.theme.text)
+    return current == value
+}
+
+@yui_toggle HEAD
+# 绘制可切换按钮并返回布尔状态；点击切换，checked 仅用作首次出现时的默认值。
+@yui_toggle END
+func yui_toggle(state, id, x, y, width, height, content, checked) {
+    let widget = _yui_register_widget(state, id, "toggle", x, y, width, height)
+    if not state.checks.has(id) {
+        state.checks.set(id, checked)
+    }
+    let selected = state.checks[id]
+    let fill = state.theme.surface
+    if selected {
+        fill = state.theme.accent
+    } else if _yui_hit(widget, state.mouse_x, state.mouse_y) {
+        fill = state.theme.surface_hover
+    }
+    yui_rect(x, y, width, height, fill)
+    yui_text(_yui_text_center_x(x, width, string(content), 16), y + (height - 16) / 2, string(content), 16, state.theme.text)
+    return selected
+}
+
+@yui_combo_box HEAD
+# 绘制下拉选择框并返回当前选中索引；点击展开选项，再次选择某项后收起。
+# items 必须至少包含一个选项；selected_index 仅用于首次初始化。
+@yui_combo_box END
+func yui_combo_box(state, id, x, y, width, height, items, selected_index) {
+    assert(len(items) > 0, "YUI combo box requires at least one item")
+    let widget = _yui_register_widget(state, id, "combo", x, y, width, height)
+    if not state.values.has(id) {
+        assert(selected_index >= 0 and selected_index < len(items), "YUI combo box index is out of range")
+        state.values.set(id, selected_index)
+    }
+    let index = state.values[id]
+    if index < 0 or index >= len(items) {
+        index = 0
+        state.values.set(id, index)
+    }
+    yui_rect(x, y, width, height, state.theme.input)
+    yui_rect(x, y, width, 1, state.theme.border)
+    yui_rect(x, y + height - 1, width, 1, state.theme.border)
+    yui_text(x + 8, y + (height - 16) / 2, string(items[index]), 16, state.theme.text)
+    yui_text(x + width - 22, y + (height - 16) / 2, "v", 16, state.theme.muted)
+    if state.open == id {
+        let option = 0
+        while option < len(items) {
+            let option_y = y + height + option * height
+            let option_id = id + ":option:" + string(option)
+            let option_widget = _yui_register_widget(
+                state, option_id, "combo_option", x, option_y, width, height,
+            )
+            option_widget.owner = id
+            option_widget.index = option
+            let fill = state.theme.surface
+            if option == index {
+                fill = state.theme.selected
+            }
+            if _yui_hit(option_widget, state.mouse_x, state.mouse_y) {
+                fill = state.theme.surface_hover
+            }
+            yui_rect(x, option_y, width, height, fill)
+            yui_text(x + 8, option_y + (height - 16) / 2, string(items[option]), 16, state.theme.text)
+            option = option + 1
+        }
+    }
+    return index
+}
+
+@yui_list HEAD
+# 绘制列表选择器并返回当前选中索引；仅绘制可容纳的行，点击行即更新选择。
+# items 可为空；selected_index 仅用于首次初始化。
+@yui_list END
+func yui_list(state, id, x, y, width, height, row_height, items, selected_index) {
+    assert(row_height > 0 and height > 0, "YUI list dimensions must be positive")
+    let widget = _yui_register_widget(state, id, "list", x, y, width, height)
+    if not state.values.has(id) {
+        state.values.set(id, selected_index)
+    }
+    let selected = state.values[id]
+    let rows = int(height / row_height)
+    let index = 0
+    while index < len(items) and index < rows {
+        let row_y = y + index * row_height
+        let row_id = id + ":row:" + string(index)
+        let row = _yui_register_widget(state, row_id, "list_option", x, row_y, width, row_height)
+        row.owner = id
+        row.index = index
+        let fill = state.theme.surface
+        if selected == index {
+            fill = state.theme.selected
+        }
+        if _yui_hit(row, state.mouse_x, state.mouse_y) {
+            fill = state.theme.surface_hover
+        }
+        yui_rect(x, row_y, width, row_height, fill)
+        yui_text(x + 8, row_y + (row_height - 16) / 2, string(items[index]), 16, state.theme.text)
+        index = index + 1
+    }
+    return selected
+}
+
+@yui_tabs HEAD
+# 绘制一排互斥标签页并返回选中索引；点击标签会切换选中项。
+# tabs 必须至少包含一个项目，selected_index 仅用于首次初始化。
+@yui_tabs END
+func yui_tabs(state, id, x, y, width, height, tabs, selected_index) {
+    assert(len(tabs) > 0, "YUI tabs requires at least one tab")
+    assert(width >= len(tabs) and height > 0, "YUI tabs dimensions are invalid")
+    if not state.values.has(id) {
+        assert(selected_index >= 0 and selected_index < len(tabs), "YUI tabs index is out of range")
+        state.values.set(id, selected_index)
+    }
+    let selected = state.values[id]
+    if selected < 0 or selected >= len(tabs) {
+        selected = 0
+        state.values.set(id, selected)
+    }
+    let base_width = int(width / len(tabs))
+    let index = 0
+    while index < len(tabs) {
+        let tab_x = x + index * base_width
+        let tab_width = base_width
+        if index == len(tabs) - 1 {
+            tab_width = x + width - tab_x
+        }
+        let tab_id = id + ":tab:" + string(index)
+        let tab = _yui_register_widget(state, tab_id, "tab_option", tab_x, y, tab_width, height)
+        tab.owner = id
+        tab.index = index
+        let fill = state.theme.surface
+        if selected == index {
+            fill = state.theme.selected
+        }
+        if _yui_hit(tab, state.mouse_x, state.mouse_y) {
+            fill = state.theme.surface_hover
+        }
+        yui_rect(tab_x, y, tab_width, height, fill)
+        yui_text(
+            _yui_text_center_x(tab_x, tab_width, string(tabs[index]), 16),
+            y + (height - 16) / 2,
+            string(tabs[index]),
+            16,
+            state.theme.text,
+        )
+        index = index + 1
+    }
+    return selected
+}
+
+@yui_input HEAD
+# 绘制单行文本输入框并返回当前值；点击后聚焦，可用键盘编辑，光标支持左右、Home、End、Backspace 和 Delete。
+# value 仅在 id 首次出现时作为初始值；placeholder 在值为空且未聚焦时显示。
+# max_length 为 0 表示不限制，否则限制 Unicode 码点数；超过上限的新输入不会插入。
+@yui_input END
+func yui_input(state, id, x, y, width, height, value, placeholder, max_length) {
+    return _yui_text_entry(state, id, "input", x, y, width, height, value, placeholder, max_length, false)
+}
+
+@yui_password_field HEAD
+# 绘制密码输入框并返回真实输入值；屏幕仅显示圆点，编辑操作与 yui_input() 一致。
+@yui_password_field END
+func yui_password_field(state, id, x, y, width, height, value, placeholder, max_length) {
+    return _yui_text_entry(state, id, "password", x, y, width, height, value, placeholder, max_length, true)
+}
+
+@yui_text_area HEAD
+# 绘制多行文本编辑区并返回完整文本；支持换行、Unicode 输入及上下左右/Home/End 编辑导航。
+# max_length 为 0 表示不限制 Unicode 码点数。
+@yui_text_area END
+func yui_text_area(state, id, x, y, width, height, value, placeholder, max_length) {
+    return _yui_text_entry(state, id, "textarea", x, y, width, height, value, placeholder, max_length, false)
+}
+
+func _yui_text_entry(state, id, kind, x, y, width, height, value, placeholder, max_length, secret) {
+    assert(max_length >= 0, "YUI input max_length must not be negative")
+    assert(width > 16 and height > 16, "YUI text entry dimensions must exceed 16 pixels")
+    if kind == "textarea" {
+        assert(height >= 34, "YUI text area height must be at least 34 pixels")
+    }
+    let widget = _yui_register_widget(state, id, kind, x, y, width, height)
+    widget.max_length = max_length
+    if not state.values.has(id) {
+        let initial = strings.ToRunes(string(value))
+        if max_length > 0 and len(initial) > max_length {
+            initial = initial[:max_length]
+        }
+        let initial_text = strings.FromRunes(initial)
+        state.values.set(id, initial_text)
+        state.cursors.set(id, len(initial))
+    }
+    let current = state.values[id]
+    let fill = state.theme.input
+    let border = state.theme.border
+    if state.focused == id {
+        border = state.theme.accent
+    } else if _yui_hit(widget, state.mouse_x, state.mouse_y) {
+        border = state.theme.surface_hover
+    }
+    yui_rect(x, y, width, height, fill)
+    yui_rect(x, y, width, 1, border)
+    yui_rect(x, y + height - 1, width, 1, border)
+    yui_rect(x, y, 1, height, border)
+    yui_rect(x + width - 1, y, 1, height, border)
+    let shown = current
+    let text_color = state.theme.text
+    if shown == "" and state.focused != id {
+        shown = string(placeholder)
+        text_color = state.theme.muted
+    } else if secret {
+        shown = ""
+        let mask_count = len(strings.ToRunes(current))
+        while mask_count > 0 {
+            shown = shown + "*"
+            mask_count = mask_count - 1
+        }
+    }
+    if kind == "textarea" {
+        let lines = strings.Split(shown, "\n")
+        let visible_lines = int((height - 16) / 18)
+        if visible_lines < 1 {
+            visible_lines = 1
+        }
+        let line_index = len(lines) - visible_lines
+        if state.focused == id {
+            let caret = state.cursors.get(id, len(strings.ToRunes(current)))
+            let before_caret = strings.FromRunes(strings.ToRunes(current)[:caret])
+            let cursor_line = len(strings.Split(before_caret, "\n")) - 1
+            line_index = cursor_line - visible_lines + 1
+        }
+        if line_index < 0 {
+            line_index = 0
+        }
+        widget.first_line = line_index
+        let row = 0
+        let line = line_index
+        while line < len(lines) and row < visible_lines {
+            yui_text(x + 8, y + 8 + row * 18, lines[line], 16, text_color)
+            line = line + 1
+            row = row + 1
+        }
+    } else {
+        yui_text(x + 8, y + (height - 16) / 2, shown, 16, text_color)
+    }
+    if state.focused == id {
+        let cursor = state.cursors.get(id, len(strings.ToRunes(current)))
+        let caret_x = x + 8 + cursor * 8
+        let caret_y = y + 6
+        if kind == "textarea" {
+            let prefix = strings.FromRunes(strings.ToRunes(current)[:cursor])
+            let lines_before = strings.Split(prefix, "\n")
+            let final_line = lines_before[len(lines_before) - 1]
+            caret_x = x + 8 + len(strings.ToRunes(final_line)) * 8
+            let caret_row = len(lines_before) - 1 - widget.first_line
+            caret_y = y + 6 + caret_row * 18
+        }
+        yui_line(caret_x, caret_y, caret_x, caret_y + 16, 1, state.theme.accent)
+    }
+    return current
+}
+
+@yui_spinner HEAD
+# 绘制数值微调框并返回当前数值；左右小按钮按 step 增减，结果限制在 minimum 与 maximum 之间。
+# step 必须大于零，minimum 不得大于 maximum；initial 仅用于首次初始化。
+@yui_spinner END
+func yui_spinner(state, id, x, y, width, height, minimum, maximum, step, initial) {
+    assert(minimum <= maximum and step > 0, "YUI spinner bounds or step are invalid")
+    assert(width > 72 and height > 16, "YUI spinner dimensions are too small")
+    if not state.values.has(id) {
+        assert(initial >= minimum and initial <= maximum, "YUI spinner initial value is out of range")
+        state.values.set(id, initial)
+    }
+    let value = state.values[id]
+    let down = _yui_register_widget(state, id + ":down", "spinner_down", x + width - 56, y, 28, height)
+    down.owner = id
+    down.step = step
+    down.minimum = minimum
+    down.maximum = maximum
+    let up = _yui_register_widget(state, id + ":up", "spinner_up", x + width - 28, y, 28, height)
+    up.owner = id
+    up.step = step
+    up.minimum = minimum
+    up.maximum = maximum
+    yui_rect(x, y, width, height, state.theme.input)
+    yui_rect(x, y, width, 1, state.theme.border)
+    yui_rect(x, y + height - 1, width, 1, state.theme.border)
+    yui_rect(x, y, 1, height, state.theme.border)
+    yui_rect(x + width - 1, y, 1, height, state.theme.border)
+    yui_text(x + 8, y + (height - 16) / 2, string(value), 16, state.theme.text)
+    yui_rect(x + width - 57, y, 1, height, state.theme.border)
+    yui_rect(x + width - 29, y, 1, height, state.theme.border)
+    yui_text(x + width - 48, y + (height - 16) / 2, "-", 16, state.theme.text)
+    yui_text(x + width - 20, y + (height - 16) / 2, "+", 16, state.theme.text)
+    if state.values[id] < minimum {
+        state.values.set(id, minimum)
+    } else if state.values[id] > maximum {
+        state.values.set(id, maximum)
+    }
+    return state.values[id]
+}
+
+@yui_progress HEAD
+# 绘制进度条；value 必须在 0 到 1 之间，返回原值。
+@yui_progress END
+func yui_progress(state, x, y, width, height, value) {
+    assert(value >= 0 and value <= 1, "YUI progress value must be between zero and one")
+    yui_rect(x, y, width, height, state.theme.surface)
+    yui_rect(x, y, width * value, height, state.theme.accent)
+    return value
+}
+
+@yui_slider HEAD
+# 绘制可拖动的数值滑块并返回当前值；minimum 必须小于 maximum。
+# value 仅在 id 首次出现时作为初始值；之后状态由鼠标按下和拖动更新。
+@yui_slider END
+func yui_slider(state, id, x, y, width, minimum, maximum, value) {
+    assert(width > 16, "YUI slider width must be greater than 16")
+    assert(minimum < maximum, "YUI slider minimum must be less than maximum")
+    let widget = _yui_register_widget(state, id, "slider", x, y, width, 24)
+    widget.minimum = minimum
+    widget.maximum = maximum
+    if not state.values.has(id) {
+        assert(value >= minimum and value <= maximum, "YUI slider initial value must be in range")
+        state.values.set(id, value)
+    }
+    let current = state.values[id]
+    if current < minimum {
+        current = minimum
+        state.values.set(id, current)
+    } else if current > maximum {
+        current = maximum
+        state.values.set(id, current)
+    }
+    let ratio = (current - minimum) * 1.0 / (maximum - minimum)
+    let knob_x = x + 8 + ratio * (width - 16)
+    yui_rect(x + 8, y + 10, width - 16, 4, state.theme.surface)
+    yui_rect(x + 8, y + 10, knob_x - x - 8, 4, state.theme.accent)
+    yui_circle(knob_x, y + 12, 8, state.theme.accent)
+    return current
+}
+
+@yui_column HEAD
+# 设置垂直布局起点、宽度和相邻控件间距；配合 yui_next(height) 使用。
+@yui_column END
+func yui_column(state, x, y, width, gap) {
+    assert(width > 0 and gap >= 0, "YUI column width must be positive and gap non-negative")
+    state.layout = {"x": x, "y": y, "width": width, "gap": gap}
+    return state
+}
+
+@yui_next HEAD
+# 在当前列中分配下一个矩形并前移布局游标；未先调用 yui_column() 时抛出错误。
+@yui_next END
+func yui_next(state, height) {
+    assert(state.layout != nil, "call yui_column() before yui_next()")
+    assert(height > 0, "YUI layout item height must be positive")
+    let bounds = {
+        "x": state.layout.x,
+        "y": state.layout.y,
+        "width": state.layout.width,
+        "height": height,
+    }
+    state.layout.y = state.layout.y + height + state.layout.gap
+    return bounds
+}
+
+@yui_button_in_column HEAD
+# 在垂直布局中分配并绘制按钮；行为与 yui_button() 相同。
+@yui_button_in_column END
+func yui_button_in_column(state, id, height, content) {
+    let bounds = yui_next(state, height)
+    return yui_button(state, id, bounds.x, bounds.y, bounds.width, bounds.height, content)
+}
+
+@yui_input_in_column HEAD
+# 在垂直布局中分配并绘制单行文本输入框；参数及返回值与 yui_input() 相同。
+@yui_input_in_column END
+func yui_input_in_column(state, id, height, value, placeholder, max_length) {
+    let bounds = yui_next(state, height)
+    return yui_input(state, id, bounds.x, bounds.y, bounds.width, bounds.height, value, placeholder, max_length)
+}
+
+@yui_clear HEAD
+# 清空下一帧并设置背景色。
+# color 可使用 #RRGGBB、#RRGGBBAA、黑/白/红/绿/蓝/黄/透明名称，或 [r, g, b, a] 字节列表。
+# 绘制命令在 yui_present() 时作为一个完整场景提交。
+@yui_clear END
+func yui_clear(color) {
+    return __ysc_gui_clear(color)
+}
+
+@yui_rect HEAD
+# 在下一帧绘制填充矩形。
+# x、y、width、height 是逻辑画布坐标；尺寸必须是正有限数值。
+# color 的格式与 yui_clear 相同。
+@yui_rect END
+func yui_rect(x, y, width, height, color) {
+    return __ysc_gui_rect(x, y, width, height, color)
+}
+
+@yui_line HEAD
+# 在下一帧绘制线段。
+# x1、y1、x2、y2 是逻辑画布坐标，thickness 必须为正数。
+# color 的格式与 yui_clear 相同。
+@yui_line END
+func yui_line(x1, y1, x2, y2, thickness, color) {
+    return __ysc_gui_line(x1, y1, x2, y2, thickness, color)
+}
+
+@yui_circle HEAD
+# 在下一帧绘制填充圆形。
+# x、y 是圆心逻辑坐标，radius 必须为正数；color 的格式与 yui_clear 相同。
+@yui_circle END
+func yui_circle(x, y, radius, color) {
+    return __ysc_gui_circle(x, y, radius, color)
+}
+
+@yui_text HEAD
+# 在下一帧绘制文本。
+# x、y 是文本左上角逻辑坐标，size 为 1 到 512 像素，color 的格式与 yui_clear 相同。
+# 内置字体适合基础拉丁字符；其他文字可先用 yui_load_font 加载 TrueType/OpenType 字体。
+@yui_text END
+func yui_text(x, y, content, size, color) {
+    return __ysc_gui_text(x, y, content, size, color)
+}
+
+@yui_present HEAD
+# 原子提交此前排队的绘制命令，作为窗口持续显示的场景。
+# 可在事件回调或 frame 回调中重复构建并提交新场景。
+@yui_present END
+func yui_present() {
+    return __ysc_gui_present()
+}
+
+@yui_load_font HEAD
+# 从给定路径加载 TrueType/OpenType 字体，供后续 yui_text 调用使用。
+# 文件读取或字体解析失败会抛出错误；字体必须包含目标文字所需字形。
+@yui_load_font END
+func yui_load_font(path) {
+    return __ysc_gui_load_font(path)
+}
+
+@yui_quit HEAD
+# 请求关闭当前窗口；窗口事件循环退出后，等待中的 yui_run() 会返回。
+@yui_quit END
+func yui_quit() {
+    return __ysc_gui_quit()
+}
+
+@yui_run HEAD
+# 在脚本 main() 中调用，等待窗口事件并让原生窗口保持运行。
+# ysc-gui 在独立 VM 线程执行脚本，在主线程驱动窗口和输入；窗口关闭后本函数返回。
+@yui_run END
+func yui_run() {
+    while true {
+        event.wait()
+    }
+}
+
+@yui_run_ui HEAD
+# 初始化 state 的控件输入处理器并保持窗口运行；state 应由 yui_create() 创建。
+@yui_run_ui END
+func yui_run_ui(state) {
+    yui_init(state)
+    return yui_run()
+}

@@ -1,0 +1,85 @@
+package csv_utils
+import ["csv"]
+
+@csv_parse_text HEAD
+# 将 CSV 文本解析为二维列表：外层每项是一条记录，内层字段均为字符串。
+# 引号格式错误等读取问题由原生 csv.Parse 抛出。
+@csv_parse_text END
+func csv_parse_text(text) {
+    return csv.Parse(string(text))
+}
+
+@csv_parse_file HEAD
+# 读取 path 指定的 CSV 文件，返回由字符串字段构成的二维列表。
+# 文件访问错误或 CSV 格式错误由原生 csv.Read 抛出。
+@csv_parse_file END
+func csv_parse_file(path) {
+    return csv.Read(path)
+}
+
+@write_file HEAD
+# 将 rows 写入 path 指定的 CSV 文件；rows
+#   中只有列表类型的行会被写出，其他行由原生实现跳过。
+# 成功时返回 nil；文件写入错误由原生 csv.Write 抛出。
+@write_file END
+func write_file(path, rows) {
+    return csv.Write(path, rows)
+}
+
+@csv_write_file HEAD
+# write_file 的模块前缀别名，适合与其他工具模块同时导入时使用。
+# 输入、返回值及写入错误行为均与 write_file 相同。
+@csv_write_file END
+func csv_write_file(path, rows) {
+    return write_file(path, rows)
+}
+
+@csv_parse_records HEAD
+# 将 CSV 文本解析为记录字典列表：首行为列名，后续各行按列名映射。
+# 短行不包含缺失列对应的键，超出表头长度的字段被忽略；空输入返回空列表
+#   。 CSV 解析错误由原生 csv.Parse 抛出；重复列名会按字典赋值规则覆盖先前字段。
+@csv_parse_records END
+func csv_parse_records(text) {
+    let rows = csv.Parse(string(text))
+    if len(rows) == 0 {
+        return []
+    }
+    let headers = rows[0]
+    let records = []
+    for row in rows[1:] {
+        let record = {}
+        let count = len(headers)
+        if len(row) < count {
+            count = len(row)
+        }
+        let index = 0
+        while index < count {
+            record[string(headers[index])] = row[index]
+            index = index + 1
+        }
+        records.append(record)
+    }
+    return records
+}
+
+@csv_records_to_rows HEAD
+# 按 headers 指定的列顺序，将 records 字典列表转换为二维 CSV 行列表。
+# 缺失字段写为空字符串，多余字典字段忽略；返回结果可传给 csv.Write。
+#   本函数不直接写文件；records 中不能按字典方式取值的项目可能导致运行时错误。
+@csv_records_to_rows END
+func csv_records_to_rows(headers, records) {
+    let rows = [headers]
+    for record in records {
+        let row = []
+        for header in headers {
+            let value = record[string(header)]
+            if value == nil {
+                row.append("")
+            } else {
+                row.append(string(value))
+            }
+        }
+        rows.append(row)
+    }
+    return rows
+}

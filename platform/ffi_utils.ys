@@ -1,0 +1,31 @@
+package ffi_utils
+import ["ffi"]
+
+@ffi_load_library HEAD
+# ffi_load_library(path) 动态加载 path 指定的原生共享库，返回 FFI 库句柄。
+# 需要支持 cgo/libffi 的构建与当前平台可加载的库 （Windows DLL、macOS dylib、类 Unix
+#   so 等）； 路径错误、库缺失、ABI/架构不兼容或无 FFI 后端时抛错。
+#   加载和调用本机代码有进程级风险， 不应加载不可信库；此接口本身不提供沙箱隔离。
+@ffi_load_library END
+func ffi_load_library(path) {
+    return ffi.open(path)
+}
+
+@ffi_find_symbol HEAD
+# ffi_find_symbol(library, name) 在已打开的 FFI 库中查找导出符号并返回函数句柄。
+# name 可按 ffi.find 支持的符号名/序号形式传入；
+#   无效句柄、已关闭库或未导出符号会报错。
+#   返回句柄不验证函数签名；调用时必须使用正确 ABI 与参数类型。
+@ffi_find_symbol END
+func ffi_find_symbol(library, name) {
+    return ffi.find(library, name)
+}
+
+@ffi_close_library HEAD
+# ffi_close_library(library) 关闭 ffi.open 返回的库句柄并返回底层结果。
+# 关闭后该库的符号句柄不可再安全调用；无效句柄或平台关闭失败沿用底层错
+#   误。
+@ffi_close_library END
+func ffi_close_library(library) {
+    return ffi.close(library)
+}

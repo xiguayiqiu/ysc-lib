@@ -1,0 +1,53 @@
+package os_utils
+import ["os", "reflect"]
+
+@getenv_or HEAD
+# getenv_or returns the environment value for name, or fallback when that
+# value is the empty string. name is passed unchanged to os.getenv. Missing and explicitly empty variables
+#   are indistinguishable through this API; non-empty values are returned verbatim.
+@getenv_or END
+func getenv_or(name, fallback) {
+    let value = os.getenv(name)
+    if value == "" {
+        return fallback
+    }
+    return value
+}
+
+@exec_checked HEAD
+# exec_checked runs command with the strings in arguments and reports its
+# captured result as a dictionary. arguments must be iterable; the process is launched directly without
+#   shell parsing. Returns {ok, stdout, stderr, exit_code}; command launch failures are propagated by os.exec,
+#   while a nonzero process exit is returned with ok=false.
+@exec_checked END
+func exec_checked(command, arguments) {
+    let call_arguments = [command]
+    for argument in arguments {
+        call_arguments.append(argument)
+    }
+    let result = reflect.call(os.exec, call_arguments)
+    return {
+        "ok": result.exit_code == 0,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "exit_code": result.exit_code,
+    }
+}
+
+@args_after HEAD
+# args_after copies values from the zero-based start position to the end.
+# start is expected to be an integer; a negative start is clamped to zero, and a start at or beyond
+#   len(values) returns an empty list. values must support len and indexed access.
+@args_after END
+func args_after(values, start) {
+    let out = []
+    let i = start
+    if i < 0 {
+        i = 0
+    }
+    while i < len(values) {
+        out.append(values[i])
+        i = i + 1
+    }
+    return out
+}

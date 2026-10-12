@@ -1,0 +1,77 @@
+package compress_utils
+import ["compress"]
+
+@gzip_if_larger HEAD
+# 使用 gzip 压缩
+#   data，仅当压缩后长度严格小于原数据长度时才采用压缩结果。
+# 返回含 data 和 compressed 的字典；未变小时 data 为原值，compressed 为 false。
+#   输入长度和 gzip 支持类型遵循原生 len 与 compress.gzip；
+#   压缩错误会抛出。
+@gzip_if_larger END
+func gzip_if_larger(data) {
+    let compressed = compress.gzip(data)
+    if len(compressed) >= len(data) {
+        return {"data": data, "compressed": false}
+    }
+    return {"data": compressed, "compressed": true}
+}
+
+@gunzip_or HEAD
+# 解压 gzip 数据；解压调用抛错时原样返回 fallback。
+# 无效头部、损坏数据流或校验失败通常会报错；错误识别范围由原生 gzip
+#   解码器决定。
+@gunzip_or END
+func gunzip_or(data, fallback) {
+    return compress.gunzip(data) catch fallback
+}
+
+@round_trip HEAD
+# 使用 gzip 压缩 data 后立即解压并返回解压结果。
+# 压缩与解压错误均会抛出；字节或文本输入的转换与返回类型遵循原生 compress
+#   函数。
+@round_trip END
+func round_trip(data) {
+    return compress.gunzip(compress.gzip(data))
+}
+
+@compress_gzip_if_smaller HEAD
+# gzip_if_larger
+#   的模块前缀别名，保留相同的返回字典结构和“严格变小才采用”规则。
+# 输入、长度计算及错误行为与 gzip_if_larger 相同。
+@compress_gzip_if_smaller END
+func compress_gzip_if_smaller(data) {
+    return gzip_if_larger(data)
+}
+
+@compress_gunzip_or HEAD
+# gunzip_or 的模块前缀别名；解压报错时返回 fallback。
+# 参数和错误行为与 gunzip_or 相同。
+@compress_gunzip_or END
+func compress_gunzip_or(data, fallback) {
+    return gunzip_or(data, fallback)
+}
+
+@compress_round_trip HEAD
+# round_trip 的模块前缀别名；gzip 压缩或解压错误会向调用方传播。
+# 输入和返回行为与 round_trip 相同。
+@compress_round_trip END
+func compress_round_trip(data) {
+    return round_trip(data)
+}
+
+@compress_gzip_stats HEAD
+# 压缩 data
+#   并返回包含压缩字节、原长度、压缩后长度、节省字节数及是否变小的字典。
+# gzip 错误会传播；长度按 YScript 的 len 计算，因而对非字节输入不保证代表 UTF-8
+#   字节数。
+@compress_gzip_stats END
+func compress_gzip_stats(data) {
+    let packed = compress.gzip(data)
+    return {
+        "data": packed,
+        "original_size": len(data),
+        "compressed_size": len(packed),
+        "saved_bytes": len(data) - len(packed),
+        "smaller": len(packed) < len(data)
+    }
+}

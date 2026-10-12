@@ -1,0 +1,40 @@
+package sys_utils
+import ["sys"]
+
+@process_is_alive HEAD
+# process_is_alive reports whether sys.process_list currently contains pid.
+# pid is converted with int() before comparison; an unconvertible value follows int's conversion error
+#   behavior. Process enumeration errors are propagated. Visibility follows the host OS/API and may omit
+#   inaccessible processes.
+@process_is_alive END
+func process_is_alive(pid) {
+    for process in sys.process_list() {
+        if process.pid == int(pid) {
+            return true
+        }
+    }
+    return false
+}
+
+@disk_summary HEAD
+# disk_summary returns a compact subset of sys.disk_info for path.
+# path is passed unchanged to the system API. The result contains path, total, free, and used values in
+#   the standard library's byte units; lookup errors propagate, and platform-specific filesystem semantics apply.
+@disk_summary END
+func disk_summary(path) {
+    let info = sys.disk_info(path)
+    return {
+        "path": path,
+        "total": info.total,
+        "free": info.free,
+        "used": info.used,
+    }
+}
+
+@current_host HEAD
+# current_host returns the hostname reported by sys.hostname.
+# Returns a string; operating-system lookup errors are propagated.
+@current_host END
+func current_host() {
+    return sys.hostname()
+}

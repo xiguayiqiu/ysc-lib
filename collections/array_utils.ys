@@ -1,0 +1,148 @@
+package array_utils
+import ["array"]
+
+@compact HEAD
+# compact returns a new list containing every item except nil.
+# values is an iterable collection; false, zero, and empty strings are retained. Item references are
+#   copied into a new outer list, not deeply cloned.
+@compact END
+func compact(values) {
+    let out = []
+    for value in values {
+        if value != nil {
+            out.append(value)
+        }
+    }
+    return out
+}
+
+@partition HEAD
+# partition separates values according to predicate(item)'s truth value.
+# values is an iterable collection and predicate must be callable with one argument. Returns {yes: [...],
+#   no: [...]} preserving input order; callback errors propagate.
+@partition END
+func partition(values, predicate) {
+    let yes = []
+    let no = []
+    for value in values {
+        if predicate(value) {
+            yes.append(value)
+        } else {
+            no.append(value)
+        }
+    }
+    return {"yes": yes, "no": no}
+}
+
+@sum HEAD
+# sum adds all numeric items, starting from integer zero.
+# values must contain values supported by YScript's addition operator; an empty collection returns 0;
+#   otherwise returns the left-to-right accumulated result. Type/operator errors propagate (and non-numeric values
+#   follow YScript's + rules).
+@sum END
+func sum(values) {
+    let total = 0
+    for value in values {
+        total = total + value
+    }
+    return total
+}
+
+@min_max HEAD
+# min_max returns the smallest and largest item using YScript comparisons.
+# values must contain mutually comparable items. Returns nil for an empty collection; comparison errors
+#   propagate.
+@min_max END
+func min_max(values) {
+    if len(values) == 0 {
+        return nil
+    }
+    let minimum = values[0]
+    let maximum = values[0]
+    for value in values {
+        if value < minimum {
+            minimum = value
+        }
+        if value > maximum {
+            maximum = value
+        }
+    }
+    return {"min": minimum, "max": maximum}
+}
+
+@chunks HEAD
+# chunks divides values into consecutive lists of at most size elements.
+# size must be greater than zero or the assertion fails. Returns a list of consecutive chunks; the final
+#   chunk may be shorter than size.
+@chunks END
+func chunks(values, size) {
+    assert(size > 0, "chunk size must be positive")
+    return array.Chunk(values, size)
+}
+
+@array_utils_unique HEAD
+# array_utils_unique returns distinct values in first-occurrence order.
+# values must be a list accepted by array.Unique. The standard implementation identifies duplicates using
+#   its string representation; it does not promise deep structural equality for unlike values with identical string
+#   forms.
+@array_utils_unique END
+func array_utils_unique(values) {
+    return array.Unique(values)
+}
+
+@array_utils_map HEAD
+# 将 transform 按输入顺序应用于 values 的每个元素并返回新列表。
+# transform 必须是接受一个元素并返回映射结果的可调用值；回调错误会中断操作并传播。
+@array_utils_map END
+func array_utils_map(values, transform) {
+    let out = []
+    for value in values {
+        out.append(transform(value))
+    }
+    return out
+}
+
+@array_utils_filter HEAD
+# 按 predicate(item) 的真假筛选 values，并按原顺序返回保留项的新列表。
+# predicate 必须是接受一个元素并返回真假值的可调用值；回调错误会传播。
+@array_utils_filter END
+func array_utils_filter(values, predicate) {
+    let out = []
+    for value in values {
+        if predicate(value) {
+            out.append(value)
+        }
+    }
+    return out
+}
+
+@array_utils_reduce HEAD
+# 从 initial 开始按顺序调用 reducer(accumulator, item)，返回最终累积值。
+# values 可为空（此时返回 initial）；reducer 必须接受两个参数，回调错误会传播。
+@array_utils_reduce END
+func array_utils_reduce(values, initial, reducer) {
+    let accumulator = initial
+    for value in values {
+        accumulator = reducer(accumulator, value)
+    }
+    return accumulator
+}
+
+@array_utils_page HEAD
+# 以从零开始的 offset 和最多 limit 项对 values 分页，返回新列表。
+# 负 offset 按 0 处理；负 limit 按 0 处理；超过输入长度的范围返回空列表。
+@array_utils_page END
+func array_utils_page(values, offset, limit) {
+    let start = offset
+    if start < 0 {
+        start = 0
+    }
+    if limit <= 0 or start >= len(values) {
+        return []
+    }
+    let finish = start + limit
+    if finish > len(values) {
+        finish = len(values)
+    }
+    return values[start:finish]
+}

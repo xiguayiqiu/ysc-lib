@@ -1,0 +1,40 @@
+package load_utils
+import ["load"]
+
+@restart HEAD
+# restart stops the named module and starts it again.
+# name is the module/source identifier expected by load.stop and load.start. The start result is returned;
+#   a stop or start failure aborts and propagates.
+@restart END
+func restart(name) {
+    load.stop(name)
+    return load.start(name)
+}
+
+@reload_if_loaded HEAD
+# reload_if_loaded reloads name only when it exactly matches an entry in
+# load.loaded(). Returns the reload result when found, otherwise nil. Loaded-list ordering and identifier
+#   spelling are determined by the runtime; reload errors propagate.
+@reload_if_loaded END
+func reload_if_loaded(name) {
+    for source in load.loaded() {
+        if source == name {
+            return load.reload(name)
+        }
+    }
+    return nil
+}
+
+@stop_all HEAD
+# stop_all stops every source/module listed by load.loaded() and returns the
+# successfully stopped names in the order reported by that call. A stop failure propagates immediately, so
+#   later entries may remain running.
+@stop_all END
+func stop_all() {
+    let stopped = []
+    for name in load.loaded() {
+        load.stop(name)
+        stopped.append(name)
+    }
+    return stopped
+}

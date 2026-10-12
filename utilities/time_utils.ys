@@ -1,0 +1,62 @@
+package time_utils
+import ["time", "os"]
+
+@now_unix HEAD
+# now_unix returns the current Unix timestamp in whole seconds.
+# This uses time.timestamp(), not the nanosecond value returned by time.now().
+@now_unix END
+func now_unix() {
+    return time.timestamp()
+}
+
+@elapsed_seconds HEAD
+# elapsed_seconds converts a nanosecond timestamp difference to whole seconds.
+# start and finish are expected to be values in the time.now() nanosecond unit. Integer division truncates
+#   toward zero; finish earlier than start yields a negative result. No ordering or overflow checks are added.
+@elapsed_seconds END
+func elapsed_seconds(start, finish) {
+    return (finish - start) / 1000000000
+}
+
+@sleep_seconds HEAD
+# sleep_seconds sleeps for the requested number of seconds via os.sleep.
+# Non-positive values return immediately. Positive and fractional values are converted to a duration
+#   string; parser/runtime errors are propagated.
+@sleep_seconds END
+func sleep_seconds(seconds) {
+    if seconds <= 0 {
+        return
+    }
+    os.sleep(string(seconds) + "s")
+}
+
+@is_expired HEAD
+# is_expired reports whether ttl_seconds have elapsed since start.
+# start is an integer Unix timestamp in seconds (time.timestamp unit), not a time.now nanosecond
+#   timestamp. Negative TTLs are accepted and can be expired immediately. Returns a boolean.
+@is_expired END
+func is_expired(start, ttl_seconds) {
+    return time.timestamp() - start >= ttl_seconds
+}
+
+@time_utils_deadline_unix HEAD
+# time_utils_deadline_unix returns the Unix-second deadline ttl_seconds from now.
+# The value is computed using the same whole-second clock as now_unix; a negative TTL produces a deadline
+#   in the past.
+@time_utils_deadline_unix END
+func time_utils_deadline_unix(ttl_seconds) {
+    return time.timestamp() + ttl_seconds
+}
+
+@time_utils_remaining_seconds HEAD
+# time_utils_remaining_seconds returns whole seconds until deadline_unix,
+# clamped at zero once the deadline is reached or passed. deadline_unix must use the Unix-second unit
+#   returned by time.timestamp() and now_unix; no fractional seconds are represented.
+@time_utils_remaining_seconds END
+func time_utils_remaining_seconds(deadline_unix) {
+    let remaining = deadline_unix - time.timestamp()
+    if remaining < 0 {
+        return 0
+    }
+    return remaining
+}
